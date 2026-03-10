@@ -8,10 +8,24 @@ function App() {
   const getRecommendations = async () => {
 
     const response = await fetch(`http://127.0.0.1:8000/recommend?book=${book}`);
-
     const data = await response.json();
 
-    setRecommendations(data.recommendations);
+    const books = await Promise.all(
+      data.recommendations.map(async (title) => {
+
+        const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${title}`);
+
+        const bookData = await res.json();
+
+        const cover =
+          bookData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail || "";
+
+        return { title, cover };
+
+      })
+    );
+
+    setRecommendations(books);
   };
 
   return (
@@ -28,21 +42,12 @@ function App() {
           placeholder="Enter a book name..."
           value={book}
           onChange={(e) => setBook(e.target.value)}
-          style={{
-            padding:"10px",
-            width:"300px",
-            fontSize:"16px"
-          }}
+          style={{padding:"10px", width:"300px"}}
         />
 
         <button
           onClick={getRecommendations}
-          style={{
-            marginLeft:"10px",
-            padding:"10px 20px",
-            fontSize:"16px",
-            cursor:"pointer"
-          }}
+          style={{marginLeft:"10px", padding:"10px 20px"}}
         >
           Recommend
         </button>
@@ -67,11 +72,21 @@ function App() {
               borderRadius:"10px",
               padding:"20px",
               margin:"10px",
-              width:"200px",
+              width:"180px",
               boxShadow:"0 4px 10px rgba(0,0,0,0.1)"
             }}
           >
-            <h4>{rec}</h4>
+
+            {rec.cover && (
+              <img
+                src={rec.cover}
+                alt={rec.title}
+                style={{width:"120px", height:"160px"}}
+              />
+            )}
+
+            <p style={{marginTop:"10px"}}>{rec.title}</p>
+
           </div>
 
         ))}

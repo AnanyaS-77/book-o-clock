@@ -1,10 +1,17 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 app = FastAPI()
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # Load dataset
 df = pd.read_csv("dataset/clean_books.csv")
 
@@ -21,12 +28,12 @@ similarity_matrix = cosine_similarity(tfidf_matrix)
 
 def recommend(book_title, n=5):
 
-    index = df[df["title"] == book_title].index
+    matches = df[df["title"].str.contains(book_title, case=False, na=False)]
 
-    if len(index) == 0:
+    if matches.empty:
         return ["Book not found"]
 
-    index = index[0]
+    index = matches.index[0]
 
     scores = list(enumerate(similarity_matrix[index]))
     scores = sorted(scores, key=lambda x: x[1], reverse=True)

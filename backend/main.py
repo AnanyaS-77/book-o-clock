@@ -8,47 +8,41 @@ app = FastAPI()
 # Load dataset
 df = pd.read_csv("dataset/clean_books.csv")
 
-# Create features
-df["features"] = (
-    df["title"] + " " +
-    df["authors"] + " " +
-    df["publisher"]
-)
+# Create combined features
+df["features"] = df["title"] + " " + df["authors"] + " " + df["publisher"]
 
 # Vectorization
 vectorizer = TfidfVectorizer(stop_words="english")
 tfidf_matrix = vectorizer.fit_transform(df["features"])
 
-# Similarity matrix
+# Similarity
 similarity_matrix = cosine_similarity(tfidf_matrix)
 
 
-def recommend(book_title, num_recommendations=5):
+def recommend(book_title, n=5):
 
-    book_index = df[df["title"] == book_title].index
+    index = df[df["title"] == book_title].index
 
-    if len(book_index) == 0:
+    if len(index) == 0:
         return ["Book not found"]
 
-    book_index = book_index[0]
+    index = index[0]
 
-    similarity_scores = list(enumerate(similarity_matrix[book_index]))
+    scores = list(enumerate(similarity_matrix[index]))
+    scores = sorted(scores, key=lambda x: x[1], reverse=True)
 
-    similarity_scores = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
+    scores = scores[1:n+1]
 
-    similarity_scores = similarity_scores[1:num_recommendations+1]
-
-    book_indices = [i[0] for i in similarity_scores]
+    book_indices = [i[0] for i in scores]
 
     return df["title"].iloc[book_indices].tolist()
 
 
 @app.get("/")
 def home():
-    return {"message": "Book O' Clock API is running"}
+    return {"message": "Book O Clock API running"}
 
 
 @app.get("/recommend")
 def get_recommendations(book: str):
-    recommendations = recommend(book)
-    return {"recommended_books": recommendations}
+    return {"recommendations": recommend(book)}

@@ -14,7 +14,6 @@ function App() {
       data.recommendations.map(async (title) => {
 
         const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${title}`);
-
         const bookData = await res.json();
 
         const cover =
@@ -30,70 +29,77 @@ function App() {
 
   return (
 
-    <div style={{fontFamily:"Arial", textAlign:"center", padding:"40px"}}>
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center">
 
-      <h1> Book O' Clock</h1>
-      <p>AI powered book recommendations</p>
+      {/* Header */}
+      <div className="text-center mt-12">
+        <h1 className="text-5xl font-bold text-gray-800">
+           Book O' Clock
+        </h1>
 
-      <div style={{marginTop:"30px"}}>
+        <p className="text-gray-500 mt-2">
+          AI Powered Book Recommendation System
+        </p>
+      </div>
+
+      {/* Search */}
+      <div className="flex mt-10 gap-3">
 
         <input
           type="text"
-          placeholder="Enter a book name..."
+          placeholder="Search a book..."
           value={book}
           onChange={(e) => setBook(e.target.value)}
-          style={{padding:"10px", width:"300px"}}
+          className="px-4 py-3 w-80 rounded-lg border shadow-sm focus:outline-none"
         />
 
         <button
           onClick={getRecommendations}
-          style={{marginLeft:"10px", padding:"10px 20px"}}
+          className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition"
         >
           Recommend
         </button>
 
       </div>
 
-      <h2 style={{marginTop:"40px"}}>Recommended Books</h2>
+      {/* Recommendations */}
+      <div className="mt-14 w-full max-w-6xl px-10">
 
-      <div style={{
-        display:"flex",
-        justifyContent:"center",
-        flexWrap:"wrap",
-        marginTop:"20px"
-      }}>
+        <h2 className="text-xl font-semibold mb-6 text-gray-700">
+          Recommended Books
+        </h2>
 
-        {recommendations.map((rec, index) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8">
 
-          <div
-            key={index}
-            style={{
-              border:"1px solid #ddd",
-              borderRadius:"10px",
-              padding:"20px",
-              margin:"10px",
-              width:"180px",
-              boxShadow:"0 4px 10px rgba(0,0,0,0.1)"
-            }}
-          >
+          {recommendations.map((rec, index) => (
 
-            {rec.cover && (
-              <img
-                src={rec.cover}
-                alt={rec.title}
-                style={{width:"120px", height:"160px"}}
-              />
-            )}
+            <div
+              key={index}
+              className="bg-white rounded-xl shadow-md p-4 text-center hover:shadow-xl hover:-translate-y-1 transition"
+            >
 
-            <p style={{marginTop:"10px"}}>{rec.title}</p>
+              {rec.cover && (
+                <img
+                  src={rec.cover}
+                  alt={rec.title}
+                  className="mx-auto h-44 object-contain"
+                />
+              )}
 
-          </div>
+              <p className="text-sm font-medium mt-3">
+                {rec.title}
+              </p>
 
-        ))}
+            </div>
+
+          ))}
+
+        </div>
 
       </div>
 
     </div>
+
   );
 }
 

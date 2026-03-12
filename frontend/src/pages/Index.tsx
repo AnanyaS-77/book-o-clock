@@ -28,8 +28,12 @@ const Index = () => {
 
         const bookData = await res.json();
 
-        const cover =
+        let cover =
           bookData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail || "";
+
+        if (cover.startsWith("http://")) {
+          cover = cover.replace("http://", "https://");
+        }
 
         return {
           title,

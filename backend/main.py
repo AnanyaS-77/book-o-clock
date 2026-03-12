@@ -13,7 +13,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # Load dataset
-df = pd.read_csv("dataset/clean_books.csv")
+import os
+dataset_path = os.path.join(os.path.dirname(__file__), "../dataset/clean_books.csv")
+df = pd.read_csv(dataset_path)
 
 # Create combined features
 df["features"] = df["title"] + " " + df["authors"] + " " + df["publisher"]

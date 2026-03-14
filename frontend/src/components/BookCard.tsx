@@ -22,7 +22,7 @@ const BookCard = ({ book, compact = false, onClick }: BookCardProps) => {
     <motion.div
       whileHover={{ y: -6, scale: 1.02 }}
       transition={{ duration: 0.3 }}
-      className="group rounded-xl bg-card border border-border overflow-hidden"
+      className="cursor-pointer rounded-xl overflow-hidden bg-card border border-border transition-all duration-300 hover:scale-[1.05] hover:shadow-xl hover:border-primary"
     >
       <div
         onClick={() => onClick(book)}

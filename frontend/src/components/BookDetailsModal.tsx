@@ -68,7 +68,7 @@ const BookDetailsModal = ({ book, onClose }: Props) => {
             initial={{ scale: 0.8, opacity: 0, y: 40 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.85, opacity: 0 }}
-            transition={{ duration: 0.35, ease: "easeOut" }}
+            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
             className="relative bg-card rounded-2xl max-w-4xl w-full shadow-2xl border border-border p-8"
           >
 

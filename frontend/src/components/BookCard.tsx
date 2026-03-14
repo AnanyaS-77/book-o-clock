@@ -28,13 +28,16 @@ const BookCard = ({ book, compact = false, onClick }: BookCardProps) => {
         onClick={() => onClick(book)}
         className="cursor-pointer hover:scale-[1.03] transition-transform duration-200"
       >
-      <div className="relative overflow-hidden aspect-[2/3]">
+      <div className="relative">
+
         <img
           src={book.cover}
           alt={book.title}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+          className="w-full h-64 object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-card via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+
       </div>
 
       <div className="p-4">

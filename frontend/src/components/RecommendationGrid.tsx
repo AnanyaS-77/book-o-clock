@@ -8,9 +8,10 @@ interface Book {
 
 interface Props {
   books: Book[];
+  onBookClick?: (book: Book) => void;
 }
 
-const RecommendationGrid = ({ books }: Props) => {
+const RecommendationGrid = ({ books, onBookClick }: Props) => {
 
   if (!books || books.length === 0) return null;
 
@@ -31,7 +32,10 @@ const RecommendationGrid = ({ books }: Props) => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: i * 0.05 }}
             >
-              <BookCard book={book} />
+              <BookCard
+                book={book}
+                onClick={() => onBookClick(book)}
+              />
             </motion.div>
           ))}
 

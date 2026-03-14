@@ -5,10 +5,13 @@ import RecommendationGrid from "@/components/RecommendationGrid";
 import TrendingBooksRow from "@/components/TrendingBooksRow";
 import MoodSelector from "@/components/MoodSelector";
 import QuoteCarousel from "@/components/QuoteCarousel";
+import BookDetailsModal from "@/components/BookDetailsModal";
 
 const Index = () => {
 
-  const [recommendations, setRecommendations] = useState([]);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [selectedBook, setSelectedBook] = useState<any | null>(null);
+
   const resultsRef = useRef<HTMLDivElement | null>(null);
 
   const getRecommendations = async (query: string) => {
@@ -23,21 +26,34 @@ const Index = () => {
       data.recommendations.map(async (title: string) => {
 
         const res = await fetch(
-          `https://www.googleapis.com/books/v1/volumes?q=${title}`
+          `https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(title)}`
         );
 
         const bookData = await res.json();
 
+        const info = bookData.items?.[0]?.volumeInfo || {};
+
         let cover =
-          bookData.items?.[0]?.volumeInfo?.imageLinks?.thumbnail || "";
+          info.imageLinks?.large ||
+          info.imageLinks?.medium ||
+          info.imageLinks?.thumbnail ||
+          "/default-book.png";
 
         if (cover.startsWith("http://")) {
           cover = cover.replace("http://", "https://");
         }
 
         return {
-          title,
-          cover
+          title: info.title || title,
+          author: info.authors?.[0] || "Unknown Author",
+          description: info.description || "No description available.",
+          cover,
+          genre: info.categories?.[0] || "Unknown Genre",
+          year: info.publishedDate
+            ? info.publishedDate.substring(0, 4)
+            : "Unknown",
+          rating: info.averageRating || "N/A",
+          pages: info.pageCount || "N/A"
         };
 
       })
@@ -46,6 +62,7 @@ const Index = () => {
     setRecommendations(books);
   };
 
+  // Auto scroll to recommendations
   useEffect(() => {
     if (recommendations.length > 0) {
       resultsRef.current?.scrollIntoView({
@@ -61,7 +78,10 @@ const Index = () => {
       <Hero onSearch={getRecommendations} />
 
       <div ref={resultsRef}>
-        <RecommendationGrid books={recommendations} />
+        <RecommendationGrid
+          books={recommendations}
+          onBookClick={(book) => setSelectedBook(book)}
+        />
       </div>
 
       <FeaturedBanner />
@@ -75,6 +95,11 @@ const Index = () => {
       <footer className="border-t border-border py-8 px-6 text-center text-muted-foreground text-sm">
         Book O' Clock — Discover your next favorite read.
       </footer>
+
+      <BookDetailsModal
+        book={selectedBook}
+        onClose={() => setSelectedBook(null)}
+      />
 
     </div>
   );

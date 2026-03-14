@@ -1,7 +1,11 @@
 import { motion } from "framer-motion";
 import { moods } from "@/data/books";
 
-const MoodSelector = () => {
+interface MoodSelectorProps {
+  onSelectMood?: (mood: string) => Promise<void>;
+}
+
+const MoodSelector: React.FC<MoodSelectorProps> = ({ onSelectMood }) => {
   return (
     <section className="py-16 px-6">
       <div className="max-w-7xl mx-auto">
@@ -18,6 +22,7 @@ const MoodSelector = () => {
               transition={{ duration: 0.3, delay: i * 0.06 }}
               whileHover={{ scale: 1.05, y: -4 }}
               whileTap={{ scale: 0.97 }}
+              onClick={() => onSelectMood?.(mood.name)}
               className={`relative rounded-2xl border border-border overflow-hidden bg-gradient-to-br ${mood.gradient} p-8 text-center`}
             >
               <span className="font-display text-lg font-semibold text-foreground">{mood.name}</span>

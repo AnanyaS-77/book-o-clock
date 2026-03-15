@@ -6,24 +6,13 @@ import TrendingBooksRow from "@/components/TrendingBooksRow";
 import MoodSelector from "@/components/MoodSelector";
 import QuoteCarousel from "@/components/QuoteCarousel";
 import BookDetailsModal from "@/components/BookDetailsModal";
-import { books as localBooks } from "@/data/books";
-
-interface Book {
-  title: string;
-  cover: string;
-  author?: string;
-  description?: string;
-  year?: string;
-  genre?: string;
-  pages?: string | number;
-  rating?: string | number;
-}
+import { books as localBooks, type Book } from "@/data/books";
 
 const Index = () => {
 
-  const [recommendations, setRecommendations] = useState<Book[]>([]);
-  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
-  const [bookHistory, setBookHistory] = useState<Book[]>([]);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [selectedBook, setSelectedBook] = useState<any | null>(null);
+  const [bookHistory, setBookHistory] = useState<any[]>([]);
 
   const resultsRef = useRef<HTMLDivElement | null>(null);
 
@@ -78,12 +67,12 @@ const Index = () => {
     }
   }, [recommendations]);
 
-  const handleOpenBook = (book: Book) => {
+  const handleOpenBook = (book: Book | any) => {
     setBookHistory([]);
     setSelectedBook(book);
   };
 
-  const handleSelectBookFromModal = (book: Book) => {
+  const handleSelectBookFromModal = (book: Book | any) => {
     setBookHistory((history) => (selectedBook ? [...history, selectedBook] : history));
     setSelectedBook(book);
   };
@@ -117,7 +106,7 @@ const Index = () => {
         />
       </div>
 
-      <FeaturedBanner />
+      <FeaturedBanner onBookClick={handleOpenBook} />
 
       <TrendingBooksRow />
 

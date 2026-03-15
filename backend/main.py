@@ -1,8 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from difflib import SequenceMatcher, get_close_matches
+import json
+import os
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import re
+from urllib.parse import quote
+from urllib.request import urlopen
 
 app = FastAPI()
 app.add_middleware(
@@ -13,12 +19,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # Load dataset
-import os
 dataset_path = os.path.join(os.path.dirname(__file__), "../dataset/clean_books.csv")
 df = pd.read_csv(dataset_path)
 
 # Normalize column names (some have leading/trailing spaces)
 df.columns = df.columns.str.strip()
+df = df.fillna("")
+
+
+def normalize_text(value: str) -> str:
+    value = str(value).lower().strip()
+    value = re.sub(r"[^a-z0-9\s]", " ", value)
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def title_tokens(value: str):
+    return {token for token in normalize_text(value).split() if len(token) > 2}
+
+
+def is_reasonable_fuzzy_match(query: str, candidate: str) -> bool:
+    similarity = SequenceMatcher(None, query, candidate).ratio()
+    shared_tokens = len(title_tokens(query) & title_tokens(candidate))
+
+    return similarity >= 0.9 or (similarity >= 0.82 and shared_tokens >= 2)
+
+
+df["normalized_title"] = df["title"].map(normalize_text)
+df["normalized_authors"] = df["authors"].map(normalize_text)
+df["popularity_score"] = pd.to_numeric(df.get("ratings_count", 0), errors="coerce").fillna(0)
 
 # Create combined features
 df["features"] = df["title"] + " " + df["authors"] + " " + df["publisher"]
@@ -31,36 +59,210 @@ tfidf_matrix = vectorizer.fit_transform(df["features"])
 similarity_matrix = cosine_similarity(tfidf_matrix)
 
 
-def recommend(book_title, n=12):
+def build_book_payload(book_row):
+    def serialize_value(value):
+        if pd.isna(value):
+            return ""
+        if hasattr(value, "item"):
+            return value.item()
+        return value
 
-    matches = df[df["title"].str.contains(book_title, case=False, na=False)]
+    return {
+        "title": serialize_value(book_row["title"]),
+        "authors": serialize_value(book_row["authors"]),
+        "publication_date": serialize_value(book_row["publication_date"]),
+        "num_pages": serialize_value(book_row["num_pages"]),
+        "average_rating": serialize_value(book_row["average_rating"]),
+        "isbn": serialize_value(book_row["isbn"]),
+        "isbn13": serialize_value(book_row["isbn13"]),
+    }
 
-    if matches.empty:
+
+def find_book_index(book_title: str):
+    normalized_title = normalize_text(book_title)
+
+    exact_matches = df[df["normalized_title"] == normalized_title]
+    if not exact_matches.empty:
+        return exact_matches.sort_values("popularity_score", ascending=False).index[0]
+
+    contains_matches = df[
+        df["normalized_title"].map(
+            lambda title: (
+                bool(title)
+                and (
+                    normalized_title in title
+                    or title in normalized_title
+                )
+                and len(title_tokens(normalized_title) & title_tokens(title)) >= 2
+            )
+        )
+    ]
+    if not contains_matches.empty:
+        return contains_matches.sort_values("popularity_score", ascending=False).index[0]
+
+    close_matches = get_close_matches(
+        normalized_title,
+        df["normalized_title"].tolist(),
+        n=1,
+        cutoff=0.72,
+    )
+    if close_matches:
+        candidate_title = close_matches[0]
+        if not is_reasonable_fuzzy_match(normalized_title, candidate_title):
+            return None
+
+        fuzzy_matches = df[df["normalized_title"] == candidate_title]
+        if not fuzzy_matches.empty:
+            return fuzzy_matches.sort_values("popularity_score", ascending=False).index[0]
+
+    return None
+
+
+def recommend_from_dataset(book_title: str, author: str = "", n: int = 12):
+    index = find_book_index(book_title)
+    if index is None:
         return []
 
-    index = matches.index[0]
-
+    source_title = df.loc[index, "normalized_title"]
     scores = list(enumerate(similarity_matrix[index]))
-    scores = sorted(scores, key=lambda x: x[1], reverse=True)
+    scores = sorted(scores, key=lambda item: item[1], reverse=True)
 
-    scores = scores[1:n+1]
+    recommendations = []
+    seen_titles = {source_title}
+    for candidate_index, _score in scores[1:]:
+        candidate = df.loc[candidate_index]
+        candidate_title = candidate["normalized_title"]
+        if candidate_title in seen_titles:
+            continue
 
-    book_indices = [i[0] for i in scores]
+        seen_titles.add(candidate_title)
+        recommendations.append(build_book_payload(candidate))
 
-    # Return a list of rich book objects to avoid relying on external APIs for metadata.
-    return (
-        df.loc[book_indices, [
-            "title",
-            "authors",
-            "publication_date",
-            "num_pages",
-            "average_rating",
-            "isbn",
-            "isbn13",
-        ]]
-        .fillna("")
-        .to_dict(orient="records")
+        if len(recommendations) >= n:
+            break
+
+    if author:
+        normalized_author = normalize_text(author)
+        same_author_first = []
+        other_books = []
+        for recommendation in recommendations:
+            normalized_recommendation_author = normalize_text(recommendation["authors"])
+            if normalized_author and normalized_author in normalized_recommendation_author:
+                same_author_first.append(recommendation)
+            else:
+                other_books.append(recommendation)
+        return (same_author_first + other_books)[:n]
+
+    return recommendations
+
+
+def fetch_json(url: str):
+    with urlopen(url, timeout=4) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def extract_isbns(industry_identifiers):
+    isbn = ""
+    isbn13 = ""
+    for identifier in industry_identifiers or []:
+        id_type = identifier.get("type", "")
+        value = identifier.get("identifier", "")
+        if id_type == "ISBN_13":
+            isbn13 = value
+        elif id_type == "ISBN_10":
+            isbn = value
+    return isbn, isbn13
+
+
+def map_google_book(item):
+    volume_info = item.get("volumeInfo", {})
+    isbn, isbn13 = extract_isbns(volume_info.get("industryIdentifiers"))
+    published_date = volume_info.get("publishedDate", "")
+
+    return {
+        "title": volume_info.get("title", ""),
+        "authors": "/".join(volume_info.get("authors", [])),
+        "publication_date": published_date,
+        "num_pages": volume_info.get("pageCount", ""),
+        "average_rating": volume_info.get("averageRating", ""),
+        "isbn": isbn,
+        "isbn13": isbn13,
+    }
+
+
+def recommend_from_google_books(book_title: str, author: str = "", n: int = 12):
+    try:
+        if author:
+            seed_query_value = f'intitle:"{book_title}" inauthor:"{author}"'
+        else:
+            seed_query_value = f'intitle:"{book_title}"'
+        seed_query = quote(seed_query_value)
+        seed_data = fetch_json(
+            f"https://www.googleapis.com/books/v1/volumes?q={seed_query}&maxResults=5"
+        )
+    except Exception as error:
+        print(f"Google Books seed lookup failed for '{book_title}': {error}")
+        return []
+
+    items = seed_data.get("items", [])
+    if not items:
+        return []
+
+    normalized_title = normalize_text(book_title)
+    items = sorted(
+        items,
+        key=lambda item: (
+            normalize_text(item.get("volumeInfo", {}).get("title", "")) != normalized_title,
+            -item.get("volumeInfo", {}).get("ratingsCount", 0),
+        ),
     )
+    seed_info = items[0].get("volumeInfo", {})
+    category = (seed_info.get("categories") or [""])[0]
+    primary_author = author or (seed_info.get("authors") or [""])[0]
+
+    queries = []
+    if category:
+        queries.append(f'subject:"{category}"')
+    if primary_author:
+        queries.append(f'inauthor:"{primary_author}"')
+    if category and primary_author:
+        queries.insert(0, f'subject:"{category}" inauthor:"{primary_author}"')
+    queries.append(f'intitle:"{book_title}"')
+
+    recommendations = []
+    seen_titles = {normalized_title}
+
+    for query in queries:
+        try:
+            data = fetch_json(
+                f"https://www.googleapis.com/books/v1/volumes?q={quote(query)}&maxResults=20"
+            )
+        except Exception as error:
+            print(f"Google Books recommendations lookup failed for '{book_title}': {error}")
+            continue
+
+        for item in data.get("items", []):
+            mapped_book = map_google_book(item)
+            candidate_title = normalize_text(mapped_book["title"])
+
+            if not candidate_title or candidate_title in seen_titles:
+                continue
+
+            seen_titles.add(candidate_title)
+            recommendations.append(mapped_book)
+
+            if len(recommendations) >= n:
+                return recommendations
+
+    return recommendations
+
+
+def recommend(book_title, author="", n=12):
+    dataset_recommendations = recommend_from_dataset(book_title, author=author, n=n)
+    if dataset_recommendations:
+        return dataset_recommendations
+
+    return recommend_from_google_books(book_title, author=author, n=n)
 
 
 @app.get("/")
@@ -69,5 +271,5 @@ def home():
 
 
 @app.get("/recommend")
-def get_recommendations(book: str):
-    return {"recommendations": recommend(book)}
+def get_recommendations(book: str, author: str = ""):
+    return {"recommendations": recommend(book, author=author)}

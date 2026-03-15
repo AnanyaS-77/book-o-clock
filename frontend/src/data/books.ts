@@ -1,10 +1,3 @@
-import bookCover1 from "@/assets/book-cover-1.jpg";
-import bookCover2 from "@/assets/book-cover-2.jpg";
-import bookCover3 from "@/assets/book-cover-3.jpg";
-import bookCover4 from "@/assets/book-cover-4.jpg";
-import bookCover5 from "@/assets/book-cover-5.jpg";
-import bookCover6 from "@/assets/book-cover-6.jpg";
-
 export interface Book {
   id: string;
   title: string;
@@ -12,6 +5,7 @@ export interface Book {
   description: string;
   cover: string;
   genre: string;
+  featured?: boolean;
 }
 
 export const books: Book[] = [
@@ -20,31 +14,34 @@ export const books: Book[] = [
     title: "The Midnight Library",
     author: "Matt Haig",
     description: "Between life and death there is a library, and within that library, the shelves go on forever.",
-    cover: bookCover1,
+    cover: "https://covers.openlibrary.org/b/isbn/9780525559474-L.jpg?default=false",
     genre: "Fantasy",
+    featured: true,
   },
   {
     id: "2",
     title: "Where the Crawdads Sing",
     author: "Delia Owens",
     description: "A painfully beautiful first novel that is at once a murder mystery and a celebration of nature.",
-    cover: bookCover2,
+    cover: "https://covers.openlibrary.org/b/isbn/9780735219090-L.jpg?default=false",
     genre: "Literary Fiction",
+    featured: true,
   },
   {
     id: "3",
     title: "The Silent Patient",
     author: "Alex Michaelides",
     description: "A shocking psychological thriller of a woman's act of violence against her husband.",
-    cover: bookCover3,
+    cover: "https://covers.openlibrary.org/b/isbn/9781250301697-L.jpg?default=false",
     genre: "Thriller",
+    featured: true,
   },
   {
     id: "4",
     title: "Project Hail Mary",
     author: "Andy Weir",
     description: "A lone astronaut must save the earth from disaster in this propulsive interstellar adventure.",
-    cover: bookCover4,
+    cover: "https://covers.openlibrary.org/b/isbn/9780593135204-L.jpg?default=false",
     genre: "Science Fiction",
   },
   {
@@ -52,7 +49,7 @@ export const books: Book[] = [
     title: "The Alchemist",
     author: "Paulo Coelho",
     description: "A magical tale about following your dreams through the deserts and markets of the world.",
-    cover: bookCover5,
+    cover: "https://covers.openlibrary.org/b/isbn/9780061122415-L.jpg?default=false",
     genre: "Adventure",
   },
   {
@@ -60,7 +57,7 @@ export const books: Book[] = [
     title: "Norwegian Wood",
     author: "Haruki Murakami",
     description: "A wild, ambitious and intensely compelling coming-of-age story set in 1960s Tokyo.",
-    cover: bookCover6,
+    cover: "https://covers.openlibrary.org/b/isbn/9780375704024-L.jpg?default=false",
     genre: "Literary Fiction",
   },
 ];

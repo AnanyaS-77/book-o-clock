@@ -1,17 +1,90 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { books } from "@/data/books";
+import { books, type Book } from "@/data/books";
 
-const featured = books.slice(0, 3);
+interface Props {
+  onBookClick?: (book: Book) => void;
+}
 
-const FeaturedBanner = () => {
+const featuredBooks = books.filter((book) => book.featured);
+
+const FeaturedBanner = ({ onBookClick }: Props) => {
   const [current, setCurrent] = useState(0);
+  const [resolvedCovers, setResolvedCovers] = useState<Record<string, string>>({});
+  const featured = featuredBooks;
+
+  if (featured.length === 0) {
+    return null;
+  }
 
   const next = () => setCurrent((c) => (c + 1) % featured.length);
   const prev = () => setCurrent((c) => (c - 1 + featured.length) % featured.length);
 
   const book = featured[current];
+  const activeCover = resolvedCovers[book.id] || book.cover;
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const fetchFeaturedCovers = async () => {
+      const coverEntries = await Promise.all(
+        featured.map(async (featuredBook) => {
+          try {
+            const query = encodeURIComponent(
+              `intitle:${featuredBook.title} inauthor:${featuredBook.author}`
+            );
+            const response = await fetch(
+              `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=1`
+            );
+
+            if (!response.ok) {
+              return null;
+            }
+
+            const data = await response.json();
+            const info = data.items?.[0]?.volumeInfo;
+            let cover =
+              info?.imageLinks?.large ||
+              info?.imageLinks?.medium ||
+              info?.imageLinks?.thumbnail;
+
+            if (!cover) {
+              return null;
+            }
+
+            if (cover.startsWith("http://")) {
+              cover = cover.replace("http://", "https://");
+            }
+
+            return [featuredBook.id, cover] as const;
+          } catch (error) {
+            console.error("Error loading featured cover:", error);
+            return null;
+          }
+        })
+      );
+
+      if (isCancelled) {
+        return;
+      }
+
+      const nextResolvedCovers = coverEntries.reduce<Record<string, string>>((acc, entry) => {
+        if (entry) {
+          acc[entry[0]] = entry[1];
+        }
+        return acc;
+      }, {});
+
+      setResolvedCovers(nextResolvedCovers);
+    };
+
+    fetchFeaturedCovers();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [featured]);
 
   return (
     <section className="py-16 px-6">
@@ -29,9 +102,15 @@ const FeaturedBanner = () => {
           >
             <div className="w-48 md:w-64 flex-shrink-0">
               <img
-                src={book.cover}
+                src={activeCover}
                 alt={book.title}
                 className="w-full rounded-xl shadow-2xl"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (target.src !== book.cover) {
+                    target.src = book.cover;
+                  }
+                }}
               />
             </div>
 
@@ -42,7 +121,10 @@ const FeaturedBanner = () => {
               <h3 className="font-display text-3xl md:text-4xl font-bold mb-2">{book.title}</h3>
               <p className="text-muted-foreground mb-2">by {book.author}</p>
               <p className="text-secondary-foreground max-w-lg mb-6">{book.description}</p>
-              <button className="px-8 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity">
+              <button
+                onClick={() => onBookClick?.({ ...book, cover: activeCover })}
+                className="px-8 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:opacity-90 transition-opacity"
+              >
                 Explore Book
               </button>
             </div>

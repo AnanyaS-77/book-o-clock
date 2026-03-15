@@ -68,8 +68,15 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
       }
 
       try {
+        const query = new URLSearchParams({
+          book: book.title,
+        });
+        if (book.author) {
+          query.set("author", book.author);
+        }
+
         const res = await fetch(
-          `http://127.0.0.1:8000/recommend?book=${encodeURIComponent(book.title)}`
+          `http://127.0.0.1:8000/recommend?${query.toString()}`
         );
 
         if (!res.ok) {
@@ -286,38 +293,40 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
               </motion.div>
             </AnimatePresence>
 
-            <div className="mt-10">
-              <h3 className="text-xl font-semibold mb-4">
-                More Like This
-              </h3>
-              <div className="flex gap-4 overflow-x-auto pb-2 justify-center">
-                {similarBooks.map((b, i) => (
-                  <div
-                    key={i}
-                    className="min-w-[120px] max-w-[120px] flex flex-col items-center cursor-pointer hover:scale-105 transition"
-                    onClick={() => handleSimilarBookClick(b)}
-                  >
-                    <img
-                      src={b.cover}
-                      alt={b.title}
-                      className="rounded-lg w-[120px] h-[180px] object-cover"
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        if (target.src !== "/placeholder.svg") {
-                          target.src = "/placeholder.svg";
-                        }
-                      }}
-                    />
+            {similarBooks.length > 0 && (
+              <div className="mt-10">
+                <h3 className="text-xl font-semibold mb-4">
+                  More Like This
+                </h3>
+                <div className="flex gap-4 overflow-x-auto pb-2 justify-center">
+                  {similarBooks.map((b, i) => (
+                    <div
+                      key={i}
+                      className="min-w-[120px] max-w-[120px] flex flex-col items-center cursor-pointer hover:scale-105 transition"
+                      onClick={() => handleSimilarBookClick(b)}
+                    >
+                      <img
+                        src={b.cover}
+                        alt={b.title}
+                        className="rounded-lg w-[120px] h-[180px] object-cover"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (target.src !== "/placeholder.svg") {
+                            target.src = "/placeholder.svg";
+                          }
+                        }}
+                      />
 
-                    <div className="mt-2 h-10 w-full text-center">
-                      <p className="text-xs line-clamp-2 text-muted-foreground">
-                        {b.title}
-                      </p>
+                      <div className="mt-2 h-10 w-full text-center">
+                        <p className="text-xs line-clamp-2 text-muted-foreground">
+                          {b.title}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
           </motion.div>
 

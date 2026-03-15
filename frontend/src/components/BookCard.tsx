@@ -22,62 +22,66 @@ const BookCard = ({ book, compact = false, onClick }: BookCardProps) => {
     <motion.div
       whileHover={{ y: -6, scale: 1.02 }}
       transition={{ duration: 0.3 }}
-      className="cursor-pointer rounded-xl overflow-hidden bg-card border border-border transition-all duration-300 hover:scale-[1.05] hover:shadow-xl hover:border-primary"
+      className="cursor-pointer rounded-xl overflow-hidden bg-card border border-border transition-all duration-300 hover:scale-[1.05] hover:shadow-xl hover:border-primary h-full flex flex-col"
     >
       <div
         onClick={() => onClick(book)}
-        className="cursor-pointer hover:scale-[1.03] transition-transform duration-200"
+        className="cursor-pointer hover:scale-[1.03] transition-transform duration-200 flex flex-col flex-1"
       >
-      <div className="relative">
+        <div className="relative">
+          <img
+            src={book.cover}
+            alt={book.title}
+            className="w-full h-64 object-cover"
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (target.src !== "/placeholder.svg") {
+                target.src = "/placeholder.svg";
+              }
+            }}
+          />
 
-        <img
-          src={book.cover}
-          alt={book.title}
-          className="w-full h-64 object-cover"
-        />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+        </div>
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+        <div className="p-4 flex flex-col flex-1">
+          <h3 className="font-display font-semibold text-foreground truncate">{book.title}</h3>
+          <p className="text-sm text-muted-foreground mb-3 truncate">{book.author}</p>
 
-      </div>
-
-      <div className="p-4">
-        <h3 className="font-display font-semibold text-foreground truncate">{book.title}</h3>
-        <p className="text-sm text-muted-foreground mb-3">{book.author}</p>
-
-        {!compact && (
-          <div className="flex gap-2">
-            <button
-              onClick={handleBuy}
-              className="flex-1 py-2 px-3 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
-            >
-              Buy Book
-            </button>
-            <button
-              onClick={handleRead}
-              className="flex-1 py-2 px-3 text-sm font-medium rounded-lg bg-secondary text-secondary-foreground border border-border hover:bg-muted transition-colors"
-            >
-              Read Online
-            </button>
+          <div className="mt-auto">
+            {!compact ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleBuy}
+                  className="flex-1 py-2 px-3 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+                >
+                  Buy Book
+                </button>
+                <button
+                  onClick={handleRead}
+                  className="flex-1 py-2 px-3 text-sm font-medium rounded-lg bg-secondary text-secondary-foreground border border-border hover:bg-muted transition-colors"
+                >
+                  Read Online
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleBuy}
+                  className="flex-1 py-1.5 px-3 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+                >
+                  Buy
+                </button>
+                <button
+                  onClick={handleRead}
+                  className="flex-1 py-1.5 px-3 text-xs font-medium rounded-lg bg-secondary text-secondary-foreground border border-border hover:bg-muted transition-colors"
+                >
+                  Read
+                </button>
+              </div>
+            )}
           </div>
-        )}
-
-        {compact && (
-          <div className="flex gap-2">
-            <button
-              onClick={handleBuy}
-              className="flex-1 py-1.5 px-3 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
-            >
-              Buy
-            </button>
-            <button
-              onClick={handleRead}
-              className="flex-1 py-1.5 px-3 text-xs font-medium rounded-lg bg-secondary text-secondary-foreground border border-border hover:bg-muted transition-colors"
-            >
-              Read
-            </button>
-          </div>
-        )}
-      </div>
+        </div>
       </div>
     </motion.div>
   );

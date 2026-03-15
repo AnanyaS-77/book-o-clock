@@ -1,6 +1,8 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ShoppingCart, BookOpen } from "lucide-react";
 import { useState, useEffect } from "react";
+import { books as localBooks } from "@/data/books";
+
 
 interface Book {
   title: string;
@@ -21,6 +23,12 @@ interface Props {
 const BookDetailsModal = ({ book, onClose }: Props) => {
   const [rating, setRating] = useState(0);
 
+  useEffect(() => {
+    if (book) {
+      console.log("BookDetailsModal showing book:", book);
+    }
+  }, [book]);
+
   const getStoredRating = (title: string) => {
     const stored = localStorage.getItem(`rating-${title}`);
     return stored ? parseInt(stored, 10) : 0;
@@ -29,12 +37,63 @@ const BookDetailsModal = ({ book, onClose }: Props) => {
   const saveRating = (title: string, rate: number) => {
     localStorage.setItem(`rating-${title}`, rate.toString());
   };
+  useEffect(() => {
+  if (book) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "auto";
+  }
+
+  return () => {
+    document.body.style.overflow = "auto";
+  };
+}, [book]);
 
   useEffect(() => {
     if (book) {
       setRating(getStoredRating(book.title));
     }
   }, [book?.title]);
+  useEffect(() => {
+    const fetchSimilarBooks = async () => {
+      if (!book?.title) {
+        setSimilarBooks([]);
+        return;
+      }
+
+      try {
+        const res = await fetch(
+          `http://127.0.0.1:8000/recommend?book=${encodeURIComponent(book.title)}`
+        );
+
+        if (!res.ok) {
+          console.error("Similar books request failed:", res.status);
+          return;
+        }
+
+        const data = await res.json();
+
+        const results = (data.recommendations || []).slice(0, 6).map((rec: any) => {
+          const localMatch = localBooks.find((b) => b.title === rec.title);
+          const isbn = rec.isbn13 || rec.isbn;
+          const openLibraryCover = isbn
+            ? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`
+            : "/placeholder.svg";
+
+          return {
+            title: rec.title,
+            cover: localMatch?.cover || openLibraryCover,
+          };
+        });
+
+        setSimilarBooks(results);
+      } catch (error) {
+        console.error("Error fetching similar books:", error);
+      }
+    };
+
+    fetchSimilarBooks();
+  }, [book]);
 
   const handleRatingClick = (star: number) => {
     setRating(star);
@@ -52,6 +111,7 @@ const BookDetailsModal = ({ book, onClose }: Props) => {
     const url = `https://archive.org/search?query=${encodeURIComponent(book?.title || "")}`;
     window.open(url, "_blank");
   };
+  const [similarBooks, setSimilarBooks] = useState<any[]>([]);
 
   return (
     <AnimatePresence>
@@ -69,7 +129,7 @@ const BookDetailsModal = ({ book, onClose }: Props) => {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.85, opacity: 0 }}
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            className="relative bg-card rounded-2xl max-w-4xl w-full shadow-2xl border border-border p-8"
+            className="relative bg-card rounded-2xl max-w-4xl w-full shadow-2xl border border-border p-8 max-h-[80vh] overflow-y-auto"
           >
 
             <button
@@ -85,6 +145,12 @@ const BookDetailsModal = ({ book, onClose }: Props) => {
                 src={book.cover}
                 alt={book.title}
                 className="rounded-xl w-full h-[420px] object-cover"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (target.src !== "/placeholder.svg") {
+                    target.src = "/placeholder.svg";
+                  }
+                }}
               />
 
               <div className="flex flex-col">
@@ -163,6 +229,32 @@ const BookDetailsModal = ({ book, onClose }: Props) => {
 
               </div>
 
+            </div>
+
+            <div className="mt-10">
+              <h3 className="text-xl font-semibold mb-4">
+                More Like This
+              </h3>
+              <div className="flex gap-4 overflow-x-auto pb-2 justify-center">
+                {similarBooks.map((b, i) => (
+                  <div
+                    key={i}
+                    className="min-w-[120px] max-w-[120px] flex flex-col items-center cursor-pointer hover:scale-105 transition"
+                  >
+                    <img
+                      src={b.cover}
+                      alt={b.title}
+                      className="rounded-lg w-[120px] h-[180px] object-cover"
+                    />
+
+                    <div className="mt-2 h-10 w-full text-center">
+                      <p className="text-xs line-clamp-2 text-muted-foreground">
+                        {b.title}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
           </motion.div>

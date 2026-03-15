@@ -6,6 +6,7 @@ import TrendingBooksRow from "@/components/TrendingBooksRow";
 import MoodSelector from "@/components/MoodSelector";
 import QuoteCarousel from "@/components/QuoteCarousel";
 import BookDetailsModal from "@/components/BookDetailsModal";
+import { books as localBooks } from "@/data/books";
 
 const Index = () => {
 
@@ -15,49 +16,38 @@ const Index = () => {
   const resultsRef = useRef<HTMLDivElement | null>(null);
 
   const getRecommendations = async (query: string) => {
-
     const response = await fetch(
-      `http://127.0.0.1:8000/recommend?book=${query}`
+      `http://127.0.0.1:8000/recommend?book=${encodeURIComponent(query)}`
     );
 
     const data = await response.json();
 
-    const books = await Promise.all(
-      data.recommendations.map(async (title: string) => {
+    const books = data.recommendations.map((rec: any) => {
+      console.log('recommendation item:', rec);
 
-        const res = await fetch(
-          `https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(title)}`
-        );
+      const year = rec.publication_date ? rec.publication_date.split("-")[0] : "Unknown";
 
-        const bookData = await res.json();
+      const localMatch = localBooks.find((b) => b.title === rec.title);
 
-        const info = bookData.items?.[0]?.volumeInfo || {};
+      const isbn = rec.isbn13 || rec.isbn;
+      const openLibraryCover = isbn
+        ? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`
+        : "/placeholder.svg";
 
-        let cover =
-          info.imageLinks?.large ||
-          info.imageLinks?.medium ||
-          info.imageLinks?.thumbnail ||
-          "/default-book.png";
+      const cover = localMatch?.cover || openLibraryCover;
+      console.log("Computed cover for", rec.title, "=", cover);
 
-        if (cover.startsWith("http://")) {
-          cover = cover.replace("http://", "https://");
-        }
-
-        return {
-          title: info.title || title,
-          author: info.authors?.[0] || "Unknown Author",
-          description: info.description || "No description available.",
-          cover,
-          genre: info.categories?.[0] || "Unknown Genre",
-          year: info.publishedDate
-            ? info.publishedDate.substring(0, 4)
-            : "Unknown",
-          rating: info.averageRating || "N/A",
-          pages: info.pageCount || "N/A"
-        };
-
-      })
-    );
+      return {
+        title: rec.title,
+        author: rec.authors || "Unknown Author",
+        description: localMatch?.description || "No description available.",
+        cover,
+        genre: localMatch?.genre || "Unknown Genre",
+        year,
+        rating: rec.average_rating || "N/A",
+        pages: rec.num_pages || "N/A",
+      };
+    });
 
     setRecommendations(books);
   };

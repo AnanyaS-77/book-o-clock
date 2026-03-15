@@ -17,6 +17,9 @@ import os
 dataset_path = os.path.join(os.path.dirname(__file__), "../dataset/clean_books.csv")
 df = pd.read_csv(dataset_path)
 
+# Normalize column names (some have leading/trailing spaces)
+df.columns = df.columns.str.strip()
+
 # Create combined features
 df["features"] = df["title"] + " " + df["authors"] + " " + df["publisher"]
 
@@ -28,12 +31,12 @@ tfidf_matrix = vectorizer.fit_transform(df["features"])
 similarity_matrix = cosine_similarity(tfidf_matrix)
 
 
-def recommend(book_title, n=5):
+def recommend(book_title, n=12):
 
     matches = df[df["title"].str.contains(book_title, case=False, na=False)]
 
     if matches.empty:
-        return ["Book not found"]
+        return []
 
     index = matches.index[0]
 
@@ -44,7 +47,20 @@ def recommend(book_title, n=5):
 
     book_indices = [i[0] for i in scores]
 
-    return df["title"].iloc[book_indices].tolist()
+    # Return a list of rich book objects to avoid relying on external APIs for metadata.
+    return (
+        df.loc[book_indices, [
+            "title",
+            "authors",
+            "publication_date",
+            "num_pages",
+            "average_rating",
+            "isbn",
+            "isbn13",
+        ]]
+        .fillna("")
+        .to_dict(orient="records")
+    )
 
 
 @app.get("/")

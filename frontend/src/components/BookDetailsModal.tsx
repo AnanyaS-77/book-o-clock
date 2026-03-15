@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ShoppingCart, BookOpen } from "lucide-react";
-import { useState, useEffect } from "react";
+import { X, ShoppingCart, BookOpen, ArrowLeft } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
 import { books as localBooks } from "@/data/books";
 
 
@@ -18,10 +18,15 @@ interface Book {
 interface Props {
   book: Book | null;
   onClose: () => void;
+  onSelectBook?: (book: Book) => void;
+  onBack?: () => void;
+  canGoBack?: boolean;
 }
 
-const BookDetailsModal = ({ book, onClose }: Props) => {
+const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = false }: Props) => {
   const [rating, setRating] = useState(0);
+  const [similarBooks, setSimilarBooks] = useState<Book[]>([]);
+  const modalContentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (book) {
@@ -54,6 +59,7 @@ const BookDetailsModal = ({ book, onClose }: Props) => {
       setRating(getStoredRating(book.title));
     }
   }, [book?.title]);
+
   useEffect(() => {
     const fetchSimilarBooks = async () => {
       if (!book?.title) {
@@ -79,11 +85,25 @@ const BookDetailsModal = ({ book, onClose }: Props) => {
           const openLibraryCover = isbn
             ? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`
             : "/placeholder.svg";
+          const year = rec.publication_date ? rec.publication_date.split("-")[0] : "Unknown";
 
           return {
             title: rec.title,
             cover: localMatch?.cover || openLibraryCover,
+            author: rec.authors || localMatch?.author || "Unknown Author",
+            description: localMatch?.description || "No description available.",
+            genre: localMatch?.genre || "Unknown Genre",
+            year,
+            rating: rec.average_rating || "N/A",
+            pages: rec.num_pages || "N/A",
           };
+        });
+
+        results.forEach((similarBook: Book) => {
+          if (similarBook.cover && similarBook.cover !== "/placeholder.svg") {
+            const image = new Image();
+            image.src = similarBook.cover;
+          }
         });
 
         setSimilarBooks(results);
@@ -111,7 +131,21 @@ const BookDetailsModal = ({ book, onClose }: Props) => {
     const url = `https://archive.org/search?query=${encodeURIComponent(book?.title || "")}`;
     window.open(url, "_blank");
   };
-  const [similarBooks, setSimilarBooks] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!book) return;
+
+    modalContentRef.current?.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }, [book]);
+
+  const handleSimilarBookClick = (similarBook: Book) => {
+    if (!onSelectBook) return;
+
+    onSelectBook(similarBook);
+  };
 
   return (
     <AnimatePresence>
@@ -125,19 +159,33 @@ const BookDetailsModal = ({ book, onClose }: Props) => {
         >
 
           <motion.div
+            ref={modalContentRef}
             initial={{ scale: 0.8, opacity: 0, y: 40 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.85, opacity: 0 }}
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
             className="relative bg-card rounded-2xl max-w-4xl w-full shadow-2xl border border-border p-8 max-h-[80vh] overflow-y-auto"
           >
+            <div className="mb-6 flex items-center justify-between">
+              <div className="min-w-[96px]">
+                {canGoBack && onBack && (
+                  <button
+                    onClick={onBack}
+                    className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-4 py-2 text-sm font-medium text-muted-foreground transition hover:border-border hover:bg-muted hover:text-white"
+                  >
+                    <ArrowLeft size={18} />
+                    Back
+                  </button>
+                )}
+              </div>
 
-            <button
-              onClick={onClose}
-              className="absolute top-5 right-5 text-muted-foreground hover:text-white"
-            >
-              <X size={24} />
-            </button>
+              <button
+                onClick={onClose}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-white"
+              >
+                <X size={22} />
+              </button>
+            </div>
 
             <div className="grid md:grid-cols-[280px_1fr] gap-10">
 
@@ -240,11 +288,18 @@ const BookDetailsModal = ({ book, onClose }: Props) => {
                   <div
                     key={i}
                     className="min-w-[120px] max-w-[120px] flex flex-col items-center cursor-pointer hover:scale-105 transition"
+                    onClick={() => handleSimilarBookClick(b)}
                   >
                     <img
                       src={b.cover}
                       alt={b.title}
                       className="rounded-lg w-[120px] h-[180px] object-cover"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (target.src !== "/placeholder.svg") {
+                          target.src = "/placeholder.svg";
+                        }
+                      }}
                     />
 
                     <div className="mt-2 h-10 w-full text-center">

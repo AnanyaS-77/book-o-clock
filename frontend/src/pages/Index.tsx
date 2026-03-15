@@ -8,10 +8,22 @@ import QuoteCarousel from "@/components/QuoteCarousel";
 import BookDetailsModal from "@/components/BookDetailsModal";
 import { books as localBooks } from "@/data/books";
 
+interface Book {
+  title: string;
+  cover: string;
+  author?: string;
+  description?: string;
+  year?: string;
+  genre?: string;
+  pages?: string | number;
+  rating?: string | number;
+}
+
 const Index = () => {
 
-  const [recommendations, setRecommendations] = useState<any[]>([]);
-  const [selectedBook, setSelectedBook] = useState<any | null>(null);
+  const [recommendations, setRecommendations] = useState<Book[]>([]);
+  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [bookHistory, setBookHistory] = useState<Book[]>([]);
 
   const resultsRef = useRef<HTMLDivElement | null>(null);
 
@@ -55,12 +67,43 @@ const Index = () => {
   // Auto scroll to recommendations
   useEffect(() => {
     if (recommendations.length > 0) {
-      resultsRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      const timeoutId = window.setTimeout(() => {
+        resultsRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 180);
+
+      return () => window.clearTimeout(timeoutId);
     }
   }, [recommendations]);
+
+  const handleOpenBook = (book: Book) => {
+    setBookHistory([]);
+    setSelectedBook(book);
+  };
+
+  const handleSelectBookFromModal = (book: Book) => {
+    setBookHistory((history) => (selectedBook ? [...history, selectedBook] : history));
+    setSelectedBook(book);
+  };
+
+  const handleBackToPreviousBook = () => {
+    setBookHistory((history) => {
+      if (history.length === 0) {
+        return history;
+      }
+
+      const previousBook = history[history.length - 1];
+      setSelectedBook(previousBook);
+      return history.slice(0, -1);
+    });
+  };
+
+  const handleCloseModal = () => {
+    setSelectedBook(null);
+    setBookHistory([]);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -70,7 +113,7 @@ const Index = () => {
       <div ref={resultsRef}>
         <RecommendationGrid
           books={recommendations}
-          onBookClick={(book) => setSelectedBook(book)}
+          onBookClick={handleOpenBook}
         />
       </div>
 
@@ -88,7 +131,10 @@ const Index = () => {
 
       <BookDetailsModal
         book={selectedBook}
-        onClose={() => setSelectedBook(null)}
+        onClose={handleCloseModal}
+        onSelectBook={handleSelectBookFromModal}
+        onBack={handleBackToPreviousBook}
+        canGoBack={bookHistory.length > 0}
       />
 
     </div>

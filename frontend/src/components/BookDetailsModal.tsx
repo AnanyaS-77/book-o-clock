@@ -187,97 +187,104 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
               </button>
             </div>
 
-            <div className="grid md:grid-cols-[280px_1fr] gap-10">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={book.title}
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -12 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                className="grid md:grid-cols-[280px_1fr] gap-10"
+              >
+                <img
+                  src={book.cover}
+                  alt={book.title}
+                  className="rounded-xl w-full h-[420px] object-cover"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (target.src !== "/placeholder.svg") {
+                      target.src = "/placeholder.svg";
+                    }
+                  }}
+                />
 
-              <img
-                src={book.cover}
-                alt={book.title}
-                className="rounded-xl w-full h-[420px] object-cover"
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  if (target.src !== "/placeholder.svg") {
-                    target.src = "/placeholder.svg";
-                  }
-                }}
-              />
+                <div className="flex flex-col">
 
-              <div className="flex flex-col">
+                  <h2 className="text-4xl font-bold mb-2">{book.title}</h2>
 
-                <h2 className="text-4xl font-bold mb-2">{book.title}</h2>
+                  <p className="text-muted-foreground mb-6">
+                    by {book.author || "Unknown Author"}
+                  </p>
 
-                <p className="text-muted-foreground mb-6">
-                  by {book.author || "Unknown Author"}
-                </p>
+                  <div className="flex items-center gap-3 text-sm text-muted-foreground mb-4">
 
-                <div className="flex items-center gap-3 text-sm text-muted-foreground mb-4">
+                      <span>{book.year}</span>
 
-                    <span>{book.year}</span>
+                      <span>•</span>
 
-                    <span>•</span>
+                      <span>{book.genre}</span>
 
-                    <span>{book.genre}</span>
+                      <span>•</span>
 
-                    <span>•</span>
+                      <span>{book.pages} pages</span>
 
-                    <span>{book.pages} pages</span>
+                      <span>•</span>
 
-                    <span>•</span>
+                      <span>Rating: {book.rating ?? "N/A"}</span>
 
-                    <span>Rating: {book.rating ?? "N/A"}</span>
+                  </div>
 
-                </div>
+                  <div className="flex gap-1 mb-6">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        onClick={() => handleRatingClick(star)}
+                        className="text-yellow-400 hover:text-yellow-300 transition text-lg"
+                      >
+                        {star <= rating ? "★" : "☆"}
+                      </button>
+                    ))}
+                  </div>
 
-                <div className="flex gap-1 mb-6">
-                  {[1, 2, 3, 4, 5].map((star) => (
+                  <p className="text-sm leading-relaxed mb-8">
+                    {book.description || "No description available."}
+                  </p>
+
+                  <div className="flex gap-4 mb-6">
+
                     <button
-                      key={star}
-                      onClick={() => handleRatingClick(star)}
-                      className="text-yellow-400 hover:text-yellow-300 transition text-lg"
+                      onClick={handleBuy}
+                      className="flex items-center gap-2 px-6 py-3 bg-primary rounded-lg hover:opacity-90 transition"
                     >
-                      {star <= rating ? "★" : "☆"}
+                      <ShoppingCart size={18} />
+                      Buy Book
                     </button>
-                  ))}
-                </div>
 
-                <p className="text-sm leading-relaxed mb-8">
-                  {book.description || "No description available."}
-                </p>
+                    <button
+                      onClick={handleRead}
+                      className="flex items-center gap-2 px-6 py-3 bg-secondary rounded-lg"
+                    >
+                      <BookOpen size={18} />
+                      Read Online
+                    </button>
 
-                <div className="flex gap-4 mb-6">
+                  </div>
 
-                  <button
-                    onClick={handleBuy}
-                    className="flex items-center gap-2 px-6 py-3 bg-primary rounded-lg hover:opacity-90 transition"
-                  >
-                    <ShoppingCart size={18} />
-                    Buy Book
-                  </button>
+                  <div className="flex gap-4">
 
-                  <button
-                    onClick={handleRead}
-                    className="flex items-center gap-2 px-6 py-3 bg-secondary rounded-lg"
-                  >
-                    <BookOpen size={18} />
-                    Read Online
-                  </button>
+                    <button className="px-6 py-2 rounded-lg hover:bg-muted transition">
+                      Add to Library
+                    </button>
+
+                    <button className="px-6 py-2 rounded-lg hover:bg-muted transition">
+                      Write Review
+                    </button>
+
+                  </div>
 
                 </div>
-
-                <div className="flex gap-4">
-
-                  <button className="px-6 py-2 rounded-lg hover:bg-muted transition">
-                    Add to Library
-                  </button>
-
-                  <button className="px-6 py-2 rounded-lg hover:bg-muted transition">
-                    Write Review
-                  </button>
-
-                </div>
-
-              </div>
-
-            </div>
+              </motion.div>
+            </AnimatePresence>
 
             <div className="mt-10">
               <h3 className="text-xl font-semibold mb-4">

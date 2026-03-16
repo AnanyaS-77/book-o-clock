@@ -108,7 +108,7 @@ const Index = () => {
 
       <FeaturedBanner onBookClick={handleOpenBook} />
 
-      <TrendingBooksRow />
+      <TrendingBooksRow onBookClick={handleOpenBook} />
 
       <MoodSelector onSelectMood={getRecommendations} />
 

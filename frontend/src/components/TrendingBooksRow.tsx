@@ -2,9 +2,13 @@ import { useRef } from "react";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import BookCard from "./BookCard";
-import { books } from "@/data/books";
+import { books, type Book } from "@/data/books";
 
-const TrendingBooksRow = () => {
+interface Props {
+  onBookClick?: (book: Book) => void;
+}
+
+const TrendingBooksRow = ({ onBookClick }: Props) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scroll = (dir: "left" | "right") => {
@@ -38,7 +42,7 @@ const TrendingBooksRow = () => {
               viewport={{ once: true }}
               transition={{ duration: 0.3, delay: i * 0.05 }}
             >
-              <BookCard book={book} compact />
+              <BookCard book={book} compact onClick={() => onBookClick?.(book)} />
             </motion.div>
           ))}
         </div>

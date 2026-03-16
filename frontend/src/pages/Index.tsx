@@ -6,6 +6,7 @@ import TrendingBooksRow from "@/components/TrendingBooksRow";
 import MoodSelector from "@/components/MoodSelector";
 import QuoteCarousel from "@/components/QuoteCarousel";
 import BookDetailsModal from "@/components/BookDetailsModal";
+import SearchEmptyState from "@/components/SearchEmptyState";
 import { books as localBooks, type Book } from "@/data/books";
 import { moodDiscoveryMap, type DiscoveryBook } from "@/lib/discovery";
 
@@ -16,6 +17,8 @@ const Index = () => {
   const [activeMood, setActiveMood] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [loadingMood, setLoadingMood] = useState("");
+  const [lastSearchQuery, setLastSearchQuery] = useState("");
+  const [hasCompletedSearch, setHasCompletedSearch] = useState(false);
   const [selectedBook, setSelectedBook] = useState<any | null>(null);
   const [bookHistory, setBookHistory] = useState<any[]>([]);
 
@@ -47,6 +50,7 @@ const Index = () => {
 
   const getRecommendations = async (query: string) => {
     setIsSearching(true);
+    setLastSearchQuery(query);
 
     try {
       const response = await fetch(
@@ -55,6 +59,7 @@ const Index = () => {
 
       const data = await response.json();
       setSearchRecommendations(mapApiBooksToCards(data.recommendations || []));
+      setHasCompletedSearch(true);
     } finally {
       setIsSearching(false);
     }
@@ -89,7 +94,7 @@ const Index = () => {
   };
 
   useEffect(() => {
-    if (searchRecommendations.length > 0) {
+    if (searchRecommendations.length > 0 || hasCompletedSearch) {
       const timeoutId = window.setTimeout(() => {
         searchResultsRef.current?.scrollIntoView({
           behavior: "smooth",
@@ -99,7 +104,7 @@ const Index = () => {
 
       return () => window.clearTimeout(timeoutId);
     }
-  }, [searchRecommendations]);
+  }, [searchRecommendations, hasCompletedSearch]);
 
   useEffect(() => {
     if (moodRecommendations.length > 0) {
@@ -152,6 +157,9 @@ const Index = () => {
           onBookClick={handleOpenBook}
           title="Recommended for You"
         />
+        {hasCompletedSearch && searchRecommendations.length === 0 && (
+          <SearchEmptyState query={lastSearchQuery} />
+        )}
       </div>
 
       <FeaturedBanner onBookClick={handleOpenBook} />

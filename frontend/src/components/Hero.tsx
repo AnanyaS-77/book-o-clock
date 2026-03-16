@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
-import { Search } from "lucide-react";
+import { Library, Search } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 interface HeroProps {
   onSearch: (query: string) => void;
@@ -26,6 +27,18 @@ const Hero = ({ onSearch }: HeroProps) => {
           animation: "gradient-shift 8s ease infinite",
         }}
       />
+
+      <div className="absolute left-0 top-0 z-20 w-full px-6 py-6">
+        <div className="mx-auto flex max-w-7xl justify-end">
+          <Link
+            to="/library"
+            className="inline-flex items-center gap-3 rounded-full border border-border/70 bg-background/70 px-6 py-3 text-base font-semibold text-foreground shadow-lg shadow-black/20 backdrop-blur-xl transition hover:border-primary hover:bg-card"
+          >
+            <Library className="h-5 w-5" />
+            My Library
+          </Link>
+        </div>
+      </div>
 
       <div className="relative z-10 max-w-3xl mx-auto px-6 text-center">
         <motion.h1

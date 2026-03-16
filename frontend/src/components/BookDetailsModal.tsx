@@ -1,22 +1,20 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ShoppingCart, BookOpen, ArrowLeft } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { books as localBooks } from "@/data/books";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import {
+  getStoredLibrary,
+  getStoredReview,
+  saveLibrary,
+  saveReview,
+  type SavedBook,
+} from "@/lib/library";
 
 
-interface Book {
-  title: string;
-  cover: string;
-  author?: string;
-  description?: string;
-  year?: string;
-  genre?: string;
-  pages?: string | number;
-  rating?: string | number;
-}
-
-const LIBRARY_STORAGE_KEY = "book-o-clock-library";
+type Book = SavedBook;
 
 interface Props {
   book: Book | null;
@@ -35,6 +33,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   const [savedReview, setSavedReview] = useState("");
   const modalContentRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (book) {
@@ -45,30 +44,6 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   const getStoredRating = (title: string) => {
     const stored = localStorage.getItem(`rating-${title}`);
     return stored ? parseInt(stored, 10) : 0;
-  };
-
-  const getStoredReview = (title: string) => {
-    return localStorage.getItem(`review-${title}`) ?? "";
-  };
-
-  const getStoredLibrary = () => {
-    const stored = localStorage.getItem(LIBRARY_STORAGE_KEY);
-
-    if (!stored) {
-      return [] as Book[];
-    }
-
-    try {
-      const parsed = JSON.parse(stored);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (error) {
-      console.error("Unable to parse library from storage:", error);
-      return [];
-    }
-  };
-
-  const saveLibrary = (library: Book[]) => {
-    localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(library));
   };
 
   const saveRating = (title: string, rate: number) => {
@@ -216,6 +191,17 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
     toast({
       title: "Added to library",
       description: `${book.title} is now in your saved books.`,
+      action: (
+        <ToastAction
+          altText="Open my library"
+          onClick={() => {
+            onClose();
+            navigate("/library");
+          }}
+        >
+          View Library
+        </ToastAction>
+      ),
     });
   };
 
@@ -232,7 +218,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
       return;
     }
 
-    localStorage.setItem(`review-${book.title}`, trimmedReview);
+    saveReview(book.title, trimmedReview);
     setSavedReview(trimmedReview);
     setReviewDraft(trimmedReview);
     setIsReviewing(false);
@@ -257,16 +243,23 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
+          <div className="relative w-full max-w-4xl">
+            <button
+              onClick={onClose}
+              className="absolute right-6 top-6 z-30 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-lg backdrop-blur transition hover:bg-muted hover:text-white"
+            >
+              <X size={22} />
+            </button>
 
-          <motion.div
-            ref={modalContentRef}
-            initial={{ scale: 0.8, opacity: 0, y: 40 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.85, opacity: 0 }}
-            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            className="relative bg-card rounded-2xl max-w-4xl w-full shadow-2xl border border-border p-8 max-h-[80vh] overflow-y-auto"
-          >
-            <div className="mb-6 flex items-center justify-between">
+            <motion.div
+              ref={modalContentRef}
+              initial={{ scale: 0.8, opacity: 0, y: 40 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.85, opacity: 0 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              className="relative max-h-[80vh] overflow-y-auto rounded-2xl border border-border bg-card p-8 pr-20 shadow-2xl"
+            >
+              <div className="mb-6 flex items-center justify-between">
               <div className="min-w-[96px]">
                 {canGoBack && onBack && (
                   <button
@@ -278,13 +271,6 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
                   </button>
                 )}
               </div>
-
-              <button
-                onClick={onClose}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-white"
-              >
-                <X size={22} />
-              </button>
             </div>
 
             <AnimatePresence mode="wait">
@@ -294,7 +280,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -12 }}
                 transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-                className="grid md:grid-cols-[280px_1fr] gap-10"
+                className="grid gap-10 md:grid-cols-[280px_1fr]"
               >
                 <img
                   src={book.cover}
@@ -469,7 +455,8 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
               </div>
             )}
 
-          </motion.div>
+            </motion.div>
+          </div>
 
         </motion.div>
 

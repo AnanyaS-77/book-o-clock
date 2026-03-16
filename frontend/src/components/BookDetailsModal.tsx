@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, ShoppingCart, BookOpen, ArrowLeft } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { books as localBooks } from "@/data/books";
+import { useToast } from "@/hooks/use-toast";
 
 
 interface Book {
@@ -15,6 +16,8 @@ interface Book {
   rating?: string | number;
 }
 
+const LIBRARY_STORAGE_KEY = "book-o-clock-library";
+
 interface Props {
   book: Book | null;
   onClose: () => void;
@@ -26,7 +29,12 @@ interface Props {
 const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = false }: Props) => {
   const [rating, setRating] = useState(0);
   const [similarBooks, setSimilarBooks] = useState<Book[]>([]);
+  const [isInLibrary, setIsInLibrary] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [reviewDraft, setReviewDraft] = useState("");
+  const [savedReview, setSavedReview] = useState("");
   const modalContentRef = useRef<HTMLDivElement | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (book) {
@@ -37,6 +45,30 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   const getStoredRating = (title: string) => {
     const stored = localStorage.getItem(`rating-${title}`);
     return stored ? parseInt(stored, 10) : 0;
+  };
+
+  const getStoredReview = (title: string) => {
+    return localStorage.getItem(`review-${title}`) ?? "";
+  };
+
+  const getStoredLibrary = () => {
+    const stored = localStorage.getItem(LIBRARY_STORAGE_KEY);
+
+    if (!stored) {
+      return [] as Book[];
+    }
+
+    try {
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.error("Unable to parse library from storage:", error);
+      return [];
+    }
+  };
+
+  const saveLibrary = (library: Book[]) => {
+    localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(library));
   };
 
   const saveRating = (title: string, rate: number) => {
@@ -57,6 +89,13 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   useEffect(() => {
     if (book) {
       setRating(getStoredRating(book.title));
+      const existingReview = getStoredReview(book.title);
+      const library = getStoredLibrary();
+
+      setSavedReview(existingReview);
+      setReviewDraft(existingReview);
+      setIsReviewing(false);
+      setIsInLibrary(library.some((libraryBook) => libraryBook.title === book.title));
     }
   }, [book?.title]);
 
@@ -152,6 +191,60 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
     if (!onSelectBook) return;
 
     onSelectBook(similarBook);
+  };
+
+  const handleToggleLibrary = () => {
+    if (!book) return;
+
+    const library = getStoredLibrary();
+    const alreadySaved = library.some((libraryBook) => libraryBook.title === book.title);
+
+    if (alreadySaved) {
+      const updatedLibrary = library.filter((libraryBook) => libraryBook.title !== book.title);
+      saveLibrary(updatedLibrary);
+      setIsInLibrary(false);
+      toast({
+        title: "Removed from library",
+        description: `${book.title} was removed from your saved books.`,
+      });
+      return;
+    }
+
+    const updatedLibrary = [...library, book];
+    saveLibrary(updatedLibrary);
+    setIsInLibrary(true);
+    toast({
+      title: "Added to library",
+      description: `${book.title} is now in your saved books.`,
+    });
+  };
+
+  const handleReviewSave = () => {
+    if (!book) return;
+
+    const trimmedReview = reviewDraft.trim();
+
+    if (!trimmedReview) {
+      toast({
+        title: "Review is empty",
+        description: "Write a few thoughts before saving your review.",
+      });
+      return;
+    }
+
+    localStorage.setItem(`review-${book.title}`, trimmedReview);
+    setSavedReview(trimmedReview);
+    setReviewDraft(trimmedReview);
+    setIsReviewing(false);
+    toast({
+      title: "Review saved",
+      description: `Your thoughts on ${book.title} are saved locally.`,
+    });
+  };
+
+  const handleReviewCancel = () => {
+    setReviewDraft(savedReview);
+    setIsReviewing(false);
   };
 
   return (
@@ -279,15 +372,63 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
 
                   <div className="flex gap-4">
 
-                    <button className="px-6 py-2 rounded-lg hover:bg-muted transition">
-                      Add to Library
+                    <button
+                      onClick={handleToggleLibrary}
+                      className={`px-6 py-2 rounded-lg transition ${
+                        isInLibrary
+                          ? "bg-primary text-primary-foreground hover:opacity-90"
+                          : "hover:bg-muted"
+                      }`}
+                    >
+                      {isInLibrary ? "Saved in Library" : "Add to Library"}
                     </button>
 
-                    <button className="px-6 py-2 rounded-lg hover:bg-muted transition">
-                      Write Review
+                    <button
+                      onClick={() => setIsReviewing(true)}
+                      className="px-6 py-2 rounded-lg hover:bg-muted transition"
+                    >
+                      {savedReview ? "Edit Review" : "Write Review"}
                     </button>
 
                   </div>
+
+                  {(savedReview || isReviewing) && (
+                    <div className="mt-6 rounded-xl border border-border/70 bg-background/70 p-4">
+                      <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Your Review
+                      </h3>
+
+                      {isReviewing ? (
+                        <div className="space-y-3">
+                          <textarea
+                            value={reviewDraft}
+                            onChange={(event) => setReviewDraft(event.target.value)}
+                            placeholder="What stood out to you about this book?"
+                            className="min-h-[120px] w-full rounded-lg border border-border bg-background px-4 py-3 text-sm outline-none transition placeholder:text-muted-foreground focus:border-primary"
+                          />
+
+                          <div className="flex gap-3">
+                            <button
+                              onClick={handleReviewSave}
+                              className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground transition hover:opacity-90"
+                            >
+                              Save Review
+                            </button>
+                            <button
+                              onClick={handleReviewCancel}
+                              className="rounded-lg px-4 py-2 text-sm transition hover:bg-muted"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm leading-relaxed text-muted-foreground">
+                          {savedReview}
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                 </div>
               </motion.div>

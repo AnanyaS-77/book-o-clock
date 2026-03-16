@@ -7,36 +7,30 @@ import MoodSelector from "@/components/MoodSelector";
 import QuoteCarousel from "@/components/QuoteCarousel";
 import BookDetailsModal from "@/components/BookDetailsModal";
 import { books as localBooks, type Book } from "@/data/books";
+import { moodDiscoveryMap, type DiscoveryBook } from "@/lib/discovery";
 
 const Index = () => {
 
-  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [searchRecommendations, setSearchRecommendations] = useState<DiscoveryBook[]>([]);
+  const [moodRecommendations, setMoodRecommendations] = useState<DiscoveryBook[]>([]);
+  const [activeMood, setActiveMood] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [loadingMood, setLoadingMood] = useState("");
   const [selectedBook, setSelectedBook] = useState<any | null>(null);
   const [bookHistory, setBookHistory] = useState<any[]>([]);
 
-  const resultsRef = useRef<HTMLDivElement | null>(null);
+  const searchResultsRef = useRef<HTMLDivElement | null>(null);
+  const moodResultsRef = useRef<HTMLDivElement | null>(null);
 
-  const getRecommendations = async (query: string) => {
-    const response = await fetch(
-      `http://127.0.0.1:8000/recommend?book=${encodeURIComponent(query)}`
-    );
-
-    const data = await response.json();
-
-    const books = data.recommendations.map((rec: any) => {
-      console.log('recommendation item:', rec);
-
+  const mapApiBooksToCards = (items: any[]) => {
+    return items.map((rec: any) => {
       const year = rec.publication_date ? rec.publication_date.split("-")[0] : "Unknown";
-
       const localMatch = localBooks.find((b) => b.title === rec.title);
-
       const isbn = rec.isbn13 || rec.isbn;
       const openLibraryCover = isbn
         ? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`
         : "/placeholder.svg";
-
       const cover = localMatch?.cover || openLibraryCover;
-      console.log("Computed cover for", rec.title, "=", cover);
 
       return {
         title: rec.title,
@@ -49,15 +43,55 @@ const Index = () => {
         pages: rec.num_pages || "N/A",
       };
     });
-
-    setRecommendations(books);
   };
 
-  // Auto scroll to recommendations
+  const getRecommendations = async (query: string) => {
+    setIsSearching(true);
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:8000/recommend?book=${encodeURIComponent(query)}`
+      );
+
+      const data = await response.json();
+      setSearchRecommendations(mapApiBooksToCards(data.recommendations || []));
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const getMoodRecommendations = async (mood: string) => {
+    const moodConfig = moodDiscoveryMap[mood.toLowerCase()];
+
+    if (!moodConfig) {
+      await getRecommendations(mood);
+      return;
+    }
+
+    setLoadingMood(moodConfig.label);
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:8000/discover/mood?mood=${encodeURIComponent(mood)}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Mood discovery request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      setActiveMood(moodConfig.label);
+      setMoodRecommendations(mapApiBooksToCards(data.recommendations || []));
+    } finally {
+      setLoadingMood("");
+    }
+  };
+
   useEffect(() => {
-    if (recommendations.length > 0) {
+    if (searchRecommendations.length > 0) {
       const timeoutId = window.setTimeout(() => {
-        resultsRef.current?.scrollIntoView({
+        searchResultsRef.current?.scrollIntoView({
           behavior: "smooth",
           block: "start",
         });
@@ -65,7 +99,20 @@ const Index = () => {
 
       return () => window.clearTimeout(timeoutId);
     }
-  }, [recommendations]);
+  }, [searchRecommendations]);
+
+  useEffect(() => {
+    if (moodRecommendations.length > 0) {
+      const timeoutId = window.setTimeout(() => {
+        moodResultsRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 180);
+
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [moodRecommendations]);
 
   const handleOpenBook = (book: Book | any) => {
     setBookHistory([]);
@@ -97,12 +144,13 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
 
-      <Hero onSearch={getRecommendations} />
+      <Hero onSearch={getRecommendations} isSearching={isSearching} />
 
-      <div ref={resultsRef}>
+      <div ref={searchResultsRef}>
         <RecommendationGrid
-          books={recommendations}
+          books={searchRecommendations}
           onBookClick={handleOpenBook}
+          title="Recommended for You"
         />
       </div>
 
@@ -110,7 +158,19 @@ const Index = () => {
 
       <TrendingBooksRow onBookClick={handleOpenBook} />
 
-      <MoodSelector onSelectMood={getRecommendations} />
+      <MoodSelector
+        onSelectMood={getMoodRecommendations}
+        activeMood={activeMood}
+        loadingMood={loadingMood}
+      />
+
+      <div ref={moodResultsRef}>
+        <RecommendationGrid
+          books={moodRecommendations}
+          onBookClick={handleOpenBook}
+          title={activeMood ? `${activeMood} Picks For You` : "Mood Picks For You"}
+        />
+      </div>
 
       <QuoteCarousel />
 

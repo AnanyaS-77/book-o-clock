@@ -7,6 +7,7 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
+import time
 from urllib.parse import quote
 from urllib.request import urlopen
 
@@ -57,6 +58,9 @@ tfidf_matrix = vectorizer.fit_transform(df["features"])
 
 # Similarity
 similarity_matrix = cosine_similarity(tfidf_matrix)
+
+GOOGLE_BOOKS_CACHE_TTL_SECONDS = 60 * 30
+google_books_cache = {}
 
 
 def build_book_payload(book_row):
@@ -157,8 +161,17 @@ def recommend_from_dataset(book_title: str, author: str = "", n: int = 12):
 
 
 def fetch_json(url: str):
+    cached_entry = google_books_cache.get(url)
+    if cached_entry and time.time() - cached_entry["timestamp"] < GOOGLE_BOOKS_CACHE_TTL_SECONDS:
+        return cached_entry["data"]
+
     with urlopen(url, timeout=4) as response:
-        return json.loads(response.read().decode("utf-8"))
+        data = json.loads(response.read().decode("utf-8"))
+        google_books_cache[url] = {
+            "timestamp": time.time(),
+            "data": data,
+        }
+        return data
 
 
 def extract_isbns(industry_identifiers):
@@ -265,6 +278,102 @@ def recommend(book_title, author="", n=12):
     return recommend_from_google_books(book_title, author=author, n=n)
 
 
+MOOD_DISCOVERY_QUERIES = {
+    "calm": [
+        'subject:"Poetry"',
+        'subject:"Nature"',
+    ],
+    "romantic": [
+        'subject:"Romance"',
+        'subject:"Love stories"',
+    ],
+    "motivated": [
+        'subject:"Self-Help"',
+        'subject:"Biography & Autobiography"',
+    ],
+    "adventurous": [
+        'subject:"Adventure stories"',
+        'subject:"Fantasy fiction"',
+    ],
+    "dark": [
+        'subject:"Thrillers"',
+        'subject:"Mystery fiction"',
+    ],
+    "reflective": [
+        'subject:"Philosophy"',
+        'subject:"Psychology"',
+    ],
+}
+
+
+def fallback_books_for_mood(mood: str, n: int = 12):
+    mood_key = normalize_text(mood)
+    genre_keywords = {
+        "calm": ["poetry", "literary", "fiction"],
+        "romantic": ["romance", "literary", "fiction"],
+        "motivated": ["adventure", "fiction"],
+        "adventurous": ["adventure", "fantasy", "science fiction"],
+        "dark": ["thriller", "mystery"],
+        "reflective": ["literary", "fiction", "fantasy"],
+    }
+
+    keywords = genre_keywords.get(mood_key, [])
+    if not keywords:
+        return []
+
+    matches = df[
+        df["title"].map(normalize_text).map(lambda value: any(keyword in value for keyword in keywords))
+        | df["publisher"].map(normalize_text).map(lambda value: any(keyword in value for keyword in keywords))
+    ]
+
+    if matches.empty:
+        matches = df[
+            df["authors"].map(normalize_text).map(lambda value: any(keyword in value for keyword in keywords))
+        ]
+
+    if matches.empty:
+        return [build_book_payload(row) for _index, row in df.sort_values("popularity_score", ascending=False).head(n).iterrows()]
+
+    return [
+        build_book_payload(row)
+        for _index, row in matches.sort_values("popularity_score", ascending=False).head(n).iterrows()
+    ]
+
+
+def discover_books_by_mood(mood: str, n: int = 12):
+    mood_key = normalize_text(mood)
+    queries = MOOD_DISCOVERY_QUERIES.get(mood_key, [])[:2]
+    recommendations = []
+    seen_titles = set()
+
+    for query in queries:
+        try:
+            data = fetch_json(
+                f"https://www.googleapis.com/books/v1/volumes?q={quote(query)}&orderBy=relevance&maxResults=20&printType=books&langRestrict=en"
+            )
+        except Exception as error:
+            print(f"Google Books mood lookup failed for '{mood}' with query '{query}': {error}")
+            continue
+
+        for item in data.get("items", []):
+            mapped_book = map_google_book(item)
+            candidate_title = normalize_text(mapped_book["title"])
+
+            if not candidate_title or candidate_title in seen_titles:
+                continue
+
+            seen_titles.add(candidate_title)
+            recommendations.append(mapped_book)
+
+            if len(recommendations) >= n:
+                return recommendations
+
+    if recommendations:
+        return recommendations
+
+    return fallback_books_for_mood(mood_key, n=n)
+
+
 @app.get("/")
 def home():
     return {"message": "Book O Clock API running"}
@@ -273,3 +382,8 @@ def home():
 @app.get("/recommend")
 def get_recommendations(book: str, author: str = ""):
     return {"recommendations": recommend(book, author=author)}
+
+
+@app.get("/discover/mood")
+def get_mood_discovery(mood: str):
+    return {"recommendations": discover_books_by_mood(mood)}

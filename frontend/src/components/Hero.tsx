@@ -4,15 +4,16 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 interface HeroProps {
-  onSearch: (query: string) => void;
+  onSearch: (query: string) => Promise<void>;
+  isSearching?: boolean;
 }
 
-const Hero = ({ onSearch }: HeroProps) => {
+const Hero = ({ onSearch, isSearching = false }: HeroProps) => {
   const [query, setQuery] = useState("");
 
-  const handleSearch = () => {
-    if (!query.trim()) return;
-    onSearch(query);
+  const handleSearch = async () => {
+    if (!query.trim() || isSearching) return;
+    await onSearch(query);
   };
 
   return (
@@ -76,10 +77,15 @@ const Hero = ({ onSearch }: HeroProps) => {
 
             <button
               onClick={handleSearch}
-              className="flex items-center gap-2 px-6 py-4 bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
+              disabled={isSearching}
+              className={`flex items-center gap-2 px-6 py-4 font-medium transition-opacity ${
+                isSearching
+                  ? "bg-primary/80 text-primary-foreground opacity-90"
+                  : "bg-primary text-primary-foreground hover:opacity-90"
+              }`}
             >
-              <Search className="w-5 h-5" />
-              <span className="hidden sm:inline">Search</span>
+              <Search className={`w-5 h-5 ${isSearching ? "animate-pulse" : ""}`} />
+              <span className="hidden sm:inline">{isSearching ? "Searching..." : "Search"}</span>
             </button>
           </div>
         </motion.div>

@@ -10,9 +10,10 @@ interface Book {
 interface Props {
   books: Book[];
   onBookClick?: (book: Book) => void;
+  title?: string;
 }
 
-const RecommendationGrid = ({ books, onBookClick }: Props) => {
+const RecommendationGrid = ({ books, onBookClick, title = "Recommended for You" }: Props) => {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   const scrollBy = (distance: number) => {
@@ -28,7 +29,7 @@ const RecommendationGrid = ({ books, onBookClick }: Props) => {
       <div className="max-w-7xl mx-auto relative">
 
         <h2 className="font-display text-3xl font-bold mb-8">
-          Recommended for You
+          {title}
         </h2>
 
         <div className="relative">

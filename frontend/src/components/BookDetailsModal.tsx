@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { books as localBooks } from "@/data/books";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+import { getFallbackCover } from "@/lib/covers";
 import { generateInsight } from "@/lib/generateInsight";
 import {
   getStoredLibrary,
@@ -289,8 +290,9 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
                   className="rounded-xl w-full h-[420px] object-cover"
                   onError={(e) => {
                     const target = e.currentTarget;
-                    if (target.src !== "/placeholder.svg") {
-                      target.src = "/placeholder.svg";
+                    const fallbackCover = getFallbackCover(book.title, book.author);
+                    if (target.src !== fallbackCover) {
+                      target.src = fallbackCover;
                     }
                   }}
                 />
@@ -454,8 +456,9 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
                         className="rounded-lg w-[120px] h-[180px] object-cover"
                         onError={(e) => {
                           const target = e.currentTarget;
-                          if (target.src !== "/placeholder.svg") {
-                            target.src = "/placeholder.svg";
+                          const fallbackCover = getFallbackCover(b.title, b.author);
+                          if (target.src !== fallbackCover) {
+                            target.src = fallbackCover;
                           }
                         }}
                       />

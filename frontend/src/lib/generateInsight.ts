@@ -71,9 +71,20 @@ const getMatchedLabels = (
     .slice(0, limit);
 };
 
+const getReadableGenre = (genre?: string) => {
+  const trimmedGenre = genre?.trim() ?? "";
+  const normalizedGenre = trimmedGenre.toLowerCase();
+
+  if (!trimmedGenre || normalizedGenre === "unknown genre" || normalizedGenre === "unknown") {
+    return "this story";
+  }
+
+  return `${normalizedGenre} read`;
+};
+
 export const generateInsight = (book: Pick<SavedBook, "title" | "genre" | "description" | "pages">) => {
   const description = book.description?.trim() ?? "";
-  const genre = book.genre?.trim() || "book";
+  const readableGenre = getReadableGenre(book.genre);
   const normalizedDescription = description.toLowerCase();
   const themes = getMatchedLabels(normalizedDescription, themeMatchers, 2);
   const tones = getMatchedLabels(normalizedDescription, toneMatchers, 1);
@@ -86,11 +97,11 @@ export const generateInsight = (book: Pick<SavedBook, "title" | "genre" | "descr
       : "";
 
   if (!description) {
-    return `If you enjoy ${genre.toLowerCase()} reads with ${genreHook}, this one looks like an easy recommendation. ${pageNote || "It should appeal to readers who want a strong mood and a story that feels thoughtfully shaped."}`;
+    return `If you enjoy ${readableGenre} with ${genreHook}, this one looks like an easy recommendation. ${pageNote || "It should appeal to readers who want a strong mood and a story that feels thoughtfully shaped."}`;
   }
 
   const themePhrase = themes.length > 0 ? toSentenceList(themes) : "character tension and emotional payoff";
   const tonePhrase = tones[0] ? ` with ${tones[0]}` : "";
 
-  return `This ${genre.toLowerCase()} pick feels geared toward readers who like ${themePhrase}${tonePhrase}, not just surface-level plot. It promises ${genreHook}, which makes it a strong match if you want a story that gives you something to feel and think about. ${pageNote}`.trim();
+  return `${readableGenre.charAt(0).toUpperCase() + readableGenre.slice(1)} feels geared toward readers who like ${themePhrase}${tonePhrase}, not just surface-level plot. It promises ${genreHook}, which makes it a strong match if you want a story that gives you something to feel and think about. ${pageNote}`.trim();
 };

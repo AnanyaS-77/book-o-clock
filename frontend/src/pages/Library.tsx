@@ -4,6 +4,7 @@ import { ArrowLeft, BookOpen, Library as LibraryIcon, MessageSquare, Trash2 } fr
 import { Link } from "react-router-dom";
 import BookDetailsModal from "@/components/BookDetailsModal";
 import { useToast } from "@/hooks/use-toast";
+import { getFallbackCover } from "@/lib/covers";
 import { getStoredLibrary, getStoredReview, saveLibrary, type SavedBook } from "@/lib/library";
 
 const Library = () => {
@@ -116,8 +117,9 @@ const Library = () => {
                           className="h-40 w-28 rounded-lg object-cover shadow-lg"
                           onError={(event) => {
                             const target = event.currentTarget;
-                            if (target.src !== "/placeholder.svg") {
-                              target.src = "/placeholder.svg";
+                            const fallbackCover = getFallbackCover(book.title, book.author);
+                            if (target.src !== fallbackCover) {
+                              target.src = fallbackCover;
                             }
                           }}
                         />

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import type { Book } from "@/data/books";
+import { getFallbackCover } from "@/lib/covers";
 
 interface BookCardProps {
   book: Book;
@@ -35,8 +36,9 @@ const BookCard = ({ book, compact = false, onClick }: BookCardProps) => {
             className="w-full h-64 object-cover"
             onError={(e) => {
               const target = e.currentTarget;
-              if (target.src !== "/placeholder.svg") {
-                target.src = "/placeholder.svg";
+              const fallbackCover = getFallbackCover(book.title, book.author);
+              if (target.src !== fallbackCover) {
+                target.src = fallbackCover;
               }
             }}
           />

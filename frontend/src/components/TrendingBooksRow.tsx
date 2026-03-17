@@ -33,7 +33,7 @@ const TrendingBooksRow = ({ onBookClick }: Props) => {
         </div>
 
         <div ref={scrollRef} className="flex gap-5 overflow-x-auto scrollbar-hide pb-4">
-          {[...books, ...books].map((book, i) => (
+          {books.map((book, i) => (
             <motion.div
               key={`${book.id}-${i}`}
               className="flex-shrink-0 w-44"

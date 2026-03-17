@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { books as localBooks } from "@/data/books";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+import { generateInsight } from "@/lib/generateInsight";
 import {
   getStoredLibrary,
   getStoredReview,
@@ -185,7 +186,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
       return;
     }
 
-    const updatedLibrary = [...library, book];
+    const updatedLibrary = [book, ...library.filter((libraryBook) => libraryBook.title !== book.title)];
     saveLibrary(updatedLibrary);
     setIsInLibrary(true);
     toast({
@@ -335,6 +336,21 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
                   <p className="text-sm leading-relaxed mb-8">
                     {book.description || "No description available."}
                   </p>
+
+                  <motion.div
+                    key={`${book.title}-insight`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+                    className="mb-8 rounded-2xl border border-white/10 bg-black/30 p-5 shadow-xl shadow-black/20 backdrop-blur-md"
+                  >
+                    <div className="mb-2 inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-primary">
+                      Why you might like this
+                    </div>
+                    <p className="text-sm leading-7 text-slate-100/90">
+                      {generateInsight(book)}
+                    </p>
+                  </motion.div>
 
                   <div className="flex gap-4 mb-6">
 

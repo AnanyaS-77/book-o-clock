@@ -82,6 +82,54 @@ def build_book_payload(book_row):
     }
 
 
+def get_suggestion_score(title: str, query: str) -> int:
+    normalized_title = normalize_text(title)
+    normalized_query = normalize_text(query)
+
+    if not normalized_title or not normalized_query:
+        return 0
+
+    if normalized_title.startswith(normalized_query):
+        return 3
+
+    if any(word.startswith(normalized_query) for word in normalized_title.split()):
+        return 2
+
+    if normalized_query in normalized_title:
+        return 1
+
+    return 0
+
+
+def get_dataset_suggestions(query: str, max_suggestions: int = 8):
+    normalized_query = normalize_text(query)
+    if not normalized_query:
+        return []
+
+    candidates = []
+    seen_titles = set()
+
+    for _index, row in df.iterrows():
+        title = str(row["title"]).strip()
+        normalized_title = row["normalized_title"]
+        score = get_suggestion_score(normalized_title, normalized_query)
+
+        if not title or not normalized_title or score <= 0 or normalized_title in seen_titles:
+            continue
+
+        seen_titles.add(normalized_title)
+        candidates.append(
+            {
+                "title": title,
+                "score": score,
+                "popularity": row["popularity_score"],
+            }
+        )
+
+    candidates.sort(key=lambda item: (-item["score"], -item["popularity"], item["title"]))
+    return [item["title"] for item in candidates[:max_suggestions]]
+
+
 def find_book_index(book_title: str):
     normalized_title = normalize_text(book_title)
 
@@ -203,35 +251,86 @@ def map_google_book(item):
     }
 
 
-def recommend_from_google_books(book_title: str, author: str = "", n: int = 12):
+def find_google_seed_book(book_title: str, author: str = ""):
     try:
         if author:
             seed_query_value = f'intitle:"{book_title}" inauthor:"{author}"'
         else:
             seed_query_value = f'intitle:"{book_title}"'
-        seed_query = quote(seed_query_value)
+
         seed_data = fetch_json(
-            f"https://www.googleapis.com/books/v1/volumes?q={seed_query}&maxResults=5"
+            f"https://www.googleapis.com/books/v1/volumes?q={quote(seed_query_value)}&maxResults=5&langRestrict=en&printType=books"
         )
     except Exception as error:
         print(f"Google Books seed lookup failed for '{book_title}': {error}")
-        return []
+        return None
 
+    normalized_title = normalize_text(book_title)
     items = seed_data.get("items", [])
     if not items:
+        return None
+
+    ranked_items = sorted(
+        items,
+        key=lambda item: (
+            get_suggestion_score(item.get("volumeInfo", {}).get("title", ""), normalized_title),
+            item.get("volumeInfo", {}).get("ratingsCount", 0),
+        ),
+        reverse=True,
+    )
+
+    best_item = ranked_items[0]
+    best_title = normalize_text(best_item.get("volumeInfo", {}).get("title", ""))
+
+    if not best_title or not is_reasonable_fuzzy_match(normalized_title, best_title):
+        return None
+
+    return map_google_book(best_item)
+
+
+def resolve_source_book(book_title: str, author: str = ""):
+    index = find_book_index(book_title)
+    if index is not None:
+        return build_book_payload(df.loc[index])
+
+    return find_google_seed_book(book_title, author=author)
+
+
+def recommend_from_google_books(book_title: str, author: str = "", n: int = 12):
+    seed_book = find_google_seed_book(book_title, author=author)
+    if not seed_book:
         return []
 
     normalized_title = normalize_text(book_title)
-    items = sorted(
-        items,
-        key=lambda item: (
-            normalize_text(item.get("volumeInfo", {}).get("title", "")) != normalized_title,
-            -item.get("volumeInfo", {}).get("ratingsCount", 0),
-        ),
-    )
-    seed_info = items[0].get("volumeInfo", {})
-    category = (seed_info.get("categories") or [""])[0]
-    primary_author = author or (seed_info.get("authors") or [""])[0]
+    category = ""
+    primary_author = author or seed_book.get("authors", "").split("/")[0]
+
+    google_seed = find_google_seed_book(book_title, author=author)
+    if google_seed:
+        # Pull richer category data from the cached Google item when available.
+        try:
+            if author:
+                seed_query_value = f'intitle:"{book_title}" inauthor:"{author}"'
+            else:
+                seed_query_value = f'intitle:"{book_title}"'
+            seed_data = fetch_json(
+                f"https://www.googleapis.com/books/v1/volumes?q={quote(seed_query_value)}&maxResults=5&langRestrict=en&printType=books"
+            )
+            items = seed_data.get("items", [])
+            if items:
+                best_item = sorted(
+                    items,
+                    key=lambda item: (
+                        get_suggestion_score(item.get("volumeInfo", {}).get("title", ""), normalized_title),
+                        item.get("volumeInfo", {}).get("ratingsCount", 0),
+                    ),
+                    reverse=True,
+                )[0]
+                seed_info = best_item.get("volumeInfo", {})
+                category = (seed_info.get("categories") or [""])[0]
+                primary_author = author or (seed_info.get("authors") or [""])[0] or primary_author
+        except Exception:
+            pass
 
     queries = []
     if category:
@@ -276,6 +375,48 @@ def recommend(book_title, author="", n=12):
         return dataset_recommendations
 
     return recommend_from_google_books(book_title, author=author, n=n)
+
+
+def get_supported_suggestions(query: str, max_suggestions: int = 8, candidate_limit: int = 12):
+    normalized_query = normalize_text(query)
+    if not normalized_query:
+        return []
+
+    try:
+        data = fetch_json(
+            f"https://www.googleapis.com/books/v1/volumes?q={quote(f'intitle:{query}')}&maxResults={candidate_limit}&langRestrict=en&printType=books"
+        )
+    except Exception as error:
+        print(f"Google Books suggestions lookup failed for '{query}', using dataset fallback: {error}")
+        return get_dataset_suggestions(query, max_suggestions=max_suggestions)
+
+    titles = []
+    seen_titles = set()
+    for item in data.get("items", []):
+        title = item.get("volumeInfo", {}).get("title", "").strip()
+        normalized_title = normalize_text(title)
+        if not title or normalized_title in seen_titles:
+            continue
+        seen_titles.add(normalized_title)
+        titles.append(title)
+
+    ranked_titles = sorted(
+        (
+            {"title": title, "score": get_suggestion_score(title, normalized_query)}
+            for title in titles
+        ),
+        key=lambda item: (-item["score"], item["title"]),
+    )
+
+    suggestions = []
+    for item in ranked_titles:
+        if item["score"] <= 0:
+            continue
+        suggestions.append(item["title"])
+        if len(suggestions) >= max_suggestions:
+            break
+
+    return suggestions or get_dataset_suggestions(query, max_suggestions=max_suggestions)
 
 
 MOOD_DISCOVERY_QUERIES = {
@@ -381,7 +522,15 @@ def home():
 
 @app.get("/recommend")
 def get_recommendations(book: str, author: str = ""):
-    return {"recommendations": recommend(book, author=author)}
+    return {
+        "source_book": resolve_source_book(book, author=author),
+        "recommendations": recommend(book, author=author),
+    }
+
+
+@app.get("/search/suggestions")
+def get_search_suggestions(query: str, limit: int = 8):
+    return {"suggestions": get_supported_suggestions(query, max_suggestions=limit)}
 
 
 @app.get("/discover/mood")

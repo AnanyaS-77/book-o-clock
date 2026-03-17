@@ -58,7 +58,13 @@ const Index = () => {
       );
 
       const data = await response.json();
-      setSearchRecommendations(mapApiBooksToCards(data.recommendations || []));
+      const searchedBook = data.source_book ? mapApiBooksToCards([data.source_book])[0] : null;
+      const recommendationCards = mapApiBooksToCards(data.recommendations || []);
+      const combinedCards = searchedBook
+        ? [searchedBook, ...recommendationCards.filter((book) => book.title !== searchedBook.title)]
+        : recommendationCards;
+
+      setSearchRecommendations(combinedCards);
       setHasCompletedSearch(true);
     } finally {
       setIsSearching(false);

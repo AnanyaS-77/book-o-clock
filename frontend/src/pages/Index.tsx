@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import Hero from "@/components/Hero";
+import ContinueReadingRow, { type ContinueReadingBook } from "@/components/ContinueReadingRow";
 import FeaturedBanner from "@/components/FeaturedBanner";
 import RecommendationGrid from "@/components/RecommendationGrid";
 import TrendingBooksRow from "@/components/TrendingBooksRow";
@@ -10,11 +11,13 @@ import SearchEmptyState from "@/components/SearchEmptyState";
 import { books as localBooks, type Book } from "@/data/books";
 import { resolveBookCover } from "@/lib/covers";
 import { moodDiscoveryMap, type DiscoveryBook } from "@/lib/discovery";
+import { getStoredLibrary, getStoredReadingProgressMap } from "@/lib/library";
 
 const Index = () => {
 
   const [searchRecommendations, setSearchRecommendations] = useState<DiscoveryBook[]>([]);
   const [moodRecommendations, setMoodRecommendations] = useState<DiscoveryBook[]>([]);
+  const [continueReadingBooks, setContinueReadingBooks] = useState<ContinueReadingBook[]>([]);
   const [activeMood, setActiveMood] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [loadingMood, setLoadingMood] = useState("");
@@ -25,6 +28,28 @@ const Index = () => {
 
   const searchResultsRef = useRef<HTMLDivElement | null>(null);
   const moodResultsRef = useRef<HTMLDivElement | null>(null);
+
+  const loadContinueReadingBooks = () => {
+    const library = getStoredLibrary();
+    const progressMap = getStoredReadingProgressMap();
+
+    const inProgressBooks = library
+      .map((book) => {
+        const progressEntry = progressMap[book.title];
+
+        if (!progressEntry || progressEntry.progress <= 0 || progressEntry.progress >= 100) {
+          return null;
+        }
+
+        return {
+          ...book,
+          progress: progressEntry.progress,
+        };
+      })
+      .filter((book): book is ContinueReadingBook => Boolean(book));
+
+    setContinueReadingBooks(inProgressBooks);
+  };
 
   const mapApiBooksToCards = (items: any[]) => {
     return items.map((rec: any) => {
@@ -103,6 +128,24 @@ const Index = () => {
   };
 
   useEffect(() => {
+    loadContinueReadingBooks();
+  }, []);
+
+  useEffect(() => {
+    const syncContinueReading = () => {
+      loadContinueReadingBooks();
+    };
+
+    window.addEventListener("focus", syncContinueReading);
+    window.addEventListener("storage", syncContinueReading);
+
+    return () => {
+      window.removeEventListener("focus", syncContinueReading);
+      window.removeEventListener("storage", syncContinueReading);
+    };
+  }, []);
+
+  useEffect(() => {
     if (searchRecommendations.length > 0 || hasCompletedSearch) {
       const timeoutId = window.setTimeout(() => {
         searchResultsRef.current?.scrollIntoView({
@@ -153,12 +196,15 @@ const Index = () => {
   const handleCloseModal = () => {
     setSelectedBook(null);
     setBookHistory([]);
+    loadContinueReadingBooks();
   };
 
   return (
     <div className="min-h-screen bg-background">
 
       <Hero onSearch={getRecommendations} isSearching={isSearching} />
+
+      <ContinueReadingRow books={continueReadingBooks} onBookClick={handleOpenBook} />
 
       <div ref={searchResultsRef}>
         <RecommendationGrid

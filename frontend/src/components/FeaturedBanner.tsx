@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { books, type Book } from "@/data/books";
+import { applyFallbackCover, normalizeCoverUrl, resolveBookCover } from "@/lib/covers";
 
 interface Props {
   onBookClick?: (book: Book) => void;
@@ -22,7 +23,11 @@ const FeaturedBanner = ({ onBookClick }: Props) => {
   const prev = () => setCurrent((c) => (c - 1 + featured.length) % featured.length);
 
   const book = featured[current];
-  const activeCover = resolvedCovers[book.id] || book.cover;
+  const activeCover = resolveBookCover({
+    title: book.title,
+    author: book.author,
+    primaryCover: resolvedCovers[book.id] || book.cover,
+  });
 
   useEffect(() => {
     let isCancelled = false;
@@ -53,11 +58,7 @@ const FeaturedBanner = ({ onBookClick }: Props) => {
               return null;
             }
 
-            if (cover.startsWith("http://")) {
-              cover = cover.replace("http://", "https://");
-            }
-
-            return [featuredBook.id, cover] as const;
+            return [featuredBook.id, normalizeCoverUrl(cover) ?? cover] as const;
           } catch (error) {
             console.error("Error loading featured cover:", error);
             return null;
@@ -105,12 +106,7 @@ const FeaturedBanner = ({ onBookClick }: Props) => {
                 src={activeCover}
                 alt={book.title}
                 className="w-full rounded-xl shadow-2xl"
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  if (target.src !== book.cover) {
-                    target.src = book.cover;
-                  }
-                }}
+                onError={(event) => applyFallbackCover(event, book.title, book.author)}
               />
             </div>
 

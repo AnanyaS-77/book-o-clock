@@ -1,4 +1,5 @@
 import { books as localBooks } from "@/data/books";
+import { normalizeCoverUrl, resolveBookCover } from "@/lib/covers";
 
 export interface DiscoveryBook {
   title: string;
@@ -50,14 +51,6 @@ export const moodDiscoveryMap: Record<string, MoodDiscoveryConfig> = {
   },
 };
 
-const toHttps = (url?: string) => {
-  if (!url) {
-    return "/placeholder.svg";
-  }
-
-  return url.startsWith("http://") ? url.replace("http://", "https://") : url;
-};
-
 export const normalizeGoogleBook = (item: any): DiscoveryBook | null => {
   const info = item?.volumeInfo;
 
@@ -69,9 +62,6 @@ export const normalizeGoogleBook = (item: any): DiscoveryBook | null => {
   const isbn = info.industryIdentifiers?.find((identifier: any) =>
     ["ISBN_13", "ISBN_10"].includes(identifier.type)
   )?.identifier;
-  const openLibraryCover = isbn
-    ? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`
-    : "/placeholder.svg";
   const apiCover =
     info.imageLinks?.extraLarge ||
     info.imageLinks?.large ||
@@ -83,7 +73,12 @@ export const normalizeGoogleBook = (item: any): DiscoveryBook | null => {
     title: info.title,
     author: info.authors?.join(", ") || localMatch?.author || "Unknown Author",
     description: info.description || localMatch?.description || "No description available.",
-    cover: localMatch?.cover || (apiCover ? toHttps(apiCover) : openLibraryCover),
+    cover: resolveBookCover({
+      title: info.title,
+      author: info.authors?.join(", ") || localMatch?.author || "Unknown Author",
+      primaryCover: localMatch?.cover || normalizeCoverUrl(apiCover),
+      isbn,
+    }),
     genre: info.categories?.[0] || localMatch?.genre || "Unknown Genre",
     year: info.publishedDate?.split("-")[0] || "Unknown",
     rating: info.averageRating || "N/A",

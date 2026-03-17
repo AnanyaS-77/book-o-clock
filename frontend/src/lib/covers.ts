@@ -51,3 +51,47 @@ export const getFallbackCover = (title: string, author?: string) => {
 
   return encodeSvg(svg);
 };
+
+export const normalizeCoverUrl = (url?: string | null) => {
+  if (!url) {
+    return null;
+  }
+
+  return url.startsWith("http://") ? url.replace("http://", "https://") : url;
+};
+
+export const getOpenLibraryCover = (isbn?: string | null) => {
+  if (!isbn) {
+    return null;
+  }
+
+  return `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`;
+};
+
+interface ResolveCoverOptions {
+  title: string;
+  author?: string;
+  primaryCover?: string | null;
+  isbn?: string | null;
+}
+
+export const resolveBookCover = ({
+  title,
+  author,
+  primaryCover,
+  isbn,
+}: ResolveCoverOptions) => {
+  return normalizeCoverUrl(primaryCover) || getOpenLibraryCover(isbn) || getFallbackCover(title, author);
+};
+
+export const applyFallbackCover = (
+  event: { currentTarget: HTMLImageElement },
+  title: string,
+  author?: string
+) => {
+  const fallbackCover = getFallbackCover(title, author);
+
+  if (event.currentTarget.src !== fallbackCover) {
+    event.currentTarget.src = fallbackCover;
+  }
+};

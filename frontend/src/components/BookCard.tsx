@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import type { Book } from "@/data/books";
-import { getFallbackCover } from "@/lib/covers";
+import { applyFallbackCover, resolveBookCover } from "@/lib/covers";
 
 interface BookCardProps {
   book: Book;
@@ -9,6 +9,12 @@ interface BookCardProps {
 }
 
 const BookCard = ({ book, compact = false, onClick }: BookCardProps) => {
+  const cover = resolveBookCover({
+    title: book.title,
+    author: book.author,
+    primaryCover: book.cover,
+  });
+
   const handleBuy = () => {
     const url = `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(book.title)}`;
     window.open(url, "_blank");
@@ -31,16 +37,10 @@ const BookCard = ({ book, compact = false, onClick }: BookCardProps) => {
       >
         <div className="relative">
           <img
-            src={book.cover}
+            src={cover}
             alt={book.title}
             className="w-full h-64 object-cover"
-            onError={(e) => {
-              const target = e.currentTarget;
-              const fallbackCover = getFallbackCover(book.title, book.author);
-              if (target.src !== fallbackCover) {
-                target.src = fallbackCover;
-              }
-            }}
+            onError={(event) => applyFallbackCover(event, book.title, book.author)}
           />
 
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent opacity-0 hover:opacity-100 transition-opacity" />

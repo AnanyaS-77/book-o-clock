@@ -5,13 +5,17 @@ import { useNavigate } from "react-router-dom";
 import { books as localBooks } from "@/data/books";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
-import { getFallbackCover } from "@/lib/covers";
+import { applyFallbackCover, resolveBookCover } from "@/lib/covers";
 import { generateInsight } from "@/lib/generateInsight";
 import {
+  clearReadingProgress,
   getStoredLibrary,
+  getStoredReadingProgress,
   getStoredReview,
+  saveReadingProgress,
   saveLibrary,
   saveReview,
+  type ReadingStatus,
   type SavedBook,
 } from "@/lib/library";
 
@@ -33,6 +37,8 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   const [isReviewing, setIsReviewing] = useState(false);
   const [reviewDraft, setReviewDraft] = useState("");
   const [savedReview, setSavedReview] = useState("");
+  const [readingProgress, setReadingProgress] = useState(0);
+  const [readingStatus, setReadingStatus] = useState<ReadingStatus | null>(null);
   const modalContentRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -67,12 +73,15 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
     if (book) {
       setRating(getStoredRating(book.title));
       const existingReview = getStoredReview(book.title);
+      const storedReadingProgress = getStoredReadingProgress(book.title);
       const library = getStoredLibrary();
 
       setSavedReview(existingReview);
       setReviewDraft(existingReview);
       setIsReviewing(false);
       setIsInLibrary(library.some((libraryBook) => libraryBook.title === book.title));
+      setReadingProgress(storedReadingProgress?.progress ?? 0);
+      setReadingStatus(storedReadingProgress?.status ?? null);
     }
   }, [book?.title]);
 
@@ -104,15 +113,16 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
 
         const results = (data.recommendations || []).slice(0, 6).map((rec: any) => {
           const localMatch = localBooks.find((b) => b.title === rec.title);
-          const isbn = rec.isbn13 || rec.isbn;
-          const openLibraryCover = isbn
-            ? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`
-            : "/placeholder.svg";
           const year = rec.publication_date ? rec.publication_date.split("-")[0] : "Unknown";
 
           return {
             title: rec.title,
-            cover: localMatch?.cover || openLibraryCover,
+            cover: resolveBookCover({
+              title: rec.title,
+              author: rec.authors || localMatch?.author || "Unknown Author",
+              primaryCover: localMatch?.cover,
+              isbn: rec.isbn13 || rec.isbn,
+            }),
             author: rec.authors || localMatch?.author || "Unknown Author",
             description: localMatch?.description || "No description available.",
             genre: localMatch?.genre || "Unknown Genre",
@@ -123,7 +133,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
         });
 
         results.forEach((similarBook: Book) => {
-          if (similarBook.cover && similarBook.cover !== "/placeholder.svg") {
+          if (similarBook.cover && !similarBook.cover.startsWith("data:image/svg+xml")) {
             const image = new Image();
             image.src = similarBook.cover;
           }
@@ -179,7 +189,10 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
     if (alreadySaved) {
       const updatedLibrary = library.filter((libraryBook) => libraryBook.title !== book.title);
       saveLibrary(updatedLibrary);
+      clearReadingProgress(book.title);
       setIsInLibrary(false);
+      setReadingProgress(0);
+      setReadingStatus(null);
       toast({
         title: "Removed from library",
         description: `${book.title} was removed from your saved books.`,
@@ -204,6 +217,71 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
           View Library
         </ToastAction>
       ),
+    });
+  };
+
+  const ensureBookInLibrary = () => {
+    if (!book) return;
+
+    const library = getStoredLibrary();
+    const alreadySaved = library.some((libraryBook) => libraryBook.title === book.title);
+
+    if (alreadySaved) {
+      return;
+    }
+
+    saveLibrary([book, ...library]);
+    setIsInLibrary(true);
+  };
+
+  const persistReadingProgress = (progress: number, status: ReadingStatus) => {
+    if (!book) return;
+
+    ensureBookInLibrary();
+    saveReadingProgress({
+      title: book.title,
+      progress,
+      status,
+    });
+    setReadingProgress(progress);
+    setReadingStatus(progress >= 100 ? "completed" : status);
+  };
+
+  const handleStartReading = () => {
+    if (!book) return;
+
+    persistReadingProgress(readingProgress, "reading");
+    toast({
+      title: "Reading tracker started",
+      description: `${book.title} is now on your reading list.`,
+    });
+  };
+
+  const handleProgressChange = (value: number) => {
+    setReadingProgress(value);
+    if (readingStatus) {
+      setReadingStatus(value >= 100 ? "completed" : "reading");
+    }
+  };
+
+  const handleUpdateProgress = () => {
+    if (!book) return;
+
+    const nextStatus: ReadingStatus = readingProgress >= 100 ? "completed" : "reading";
+    persistReadingProgress(readingProgress, nextStatus);
+    toast({
+      title: "Progress updated",
+      description: `${book.title} is now ${readingProgress}% complete.`,
+    });
+  };
+
+  const handleMarkCompleted = () => {
+    if (!book) return;
+
+    persistReadingProgress(100, "completed");
+    toast({
+      title: "Book completed",
+      description: `You marked ${book.title} as completed.`,
     });
   };
 
@@ -288,13 +366,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
                   src={book.cover}
                   alt={book.title}
                   className="rounded-xl w-full h-[420px] object-cover"
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    const fallbackCover = getFallbackCover(book.title, book.author);
-                    if (target.src !== fallbackCover) {
-                      target.src = fallbackCover;
-                    }
-                  }}
+                  onError={(event) => applyFallbackCover(event, book.title, book.author)}
                 />
 
                 <div className="flex flex-col">
@@ -396,6 +468,92 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
 
                   </div>
 
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
+                    className="mt-6 rounded-2xl border border-border/70 bg-background/60 p-5 shadow-lg shadow-black/10 backdrop-blur-md"
+                  >
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                          Reading Progress
+                        </h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {readingStatus === "completed"
+                            ? "Completed"
+                            : readingStatus === "reading"
+                              ? `${readingProgress}% completed`
+                              : "Not started yet"}
+                        </p>
+                      </div>
+                      {readingStatus && (
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            readingStatus === "completed"
+                              ? "bg-emerald-500/15 text-emerald-300"
+                              : "bg-primary/15 text-primary"
+                          }`}
+                        >
+                          {readingStatus === "completed" ? "Completed" : "Reading"}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mb-4 h-3 overflow-hidden rounded-full bg-white/10">
+                      <motion.div
+                        className="h-full rounded-full bg-gradient-to-r from-primary via-primary to-cyan-400"
+                        animate={{ width: `${readingProgress}%` }}
+                        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                          <span>Update Progress</span>
+                          <span>{readingProgress}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="5"
+                          value={readingProgress}
+                          onChange={(event) => handleProgressChange(Number(event.target.value))}
+                          className="h-2 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-primary"
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap gap-3">
+                        {!readingStatus && (
+                          <button
+                            onClick={handleStartReading}
+                            className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                          >
+                            Start Reading
+                          </button>
+                        )}
+                        {readingStatus && (
+                          <button
+                            onClick={handleUpdateProgress}
+                            className="rounded-xl border border-border px-4 py-2 text-sm font-medium transition hover:bg-muted"
+                          >
+                            Update Progress
+                          </button>
+                        )}
+                        {readingStatus !== "completed" && (
+                          <button
+                            onClick={handleMarkCompleted}
+                            className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/20"
+                          >
+                            Mark as Completed
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+
                   {(savedReview || isReviewing) && (
                     <div className="mt-6 rounded-xl border border-border/70 bg-background/70 p-4">
                       <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -454,13 +612,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
                         src={b.cover}
                         alt={b.title}
                         className="rounded-lg w-[120px] h-[180px] object-cover"
-                        onError={(e) => {
-                          const target = e.currentTarget;
-                          const fallbackCover = getFallbackCover(b.title, b.author);
-                          if (target.src !== fallbackCover) {
-                            target.src = fallbackCover;
-                          }
-                        }}
+                        onError={(event) => applyFallbackCover(event, b.title, b.author)}
                       />
 
                       <div className="mt-2 h-10 w-full text-center">

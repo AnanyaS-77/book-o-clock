@@ -8,6 +8,7 @@ import QuoteCarousel from "@/components/QuoteCarousel";
 import BookDetailsModal from "@/components/BookDetailsModal";
 import SearchEmptyState from "@/components/SearchEmptyState";
 import { books as localBooks, type Book } from "@/data/books";
+import { resolveBookCover } from "@/lib/covers";
 import { moodDiscoveryMap, type DiscoveryBook } from "@/lib/discovery";
 
 const Index = () => {
@@ -29,15 +30,17 @@ const Index = () => {
     return items.map((rec: any) => {
       const year = rec.publication_date ? rec.publication_date.split("-")[0] : "Unknown";
       const localMatch = localBooks.find((b) => b.title === rec.title);
-      const isbn = rec.isbn13 || rec.isbn;
-      const openLibraryCover = isbn
-        ? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false`
-        : "/placeholder.svg";
-      const cover = localMatch?.cover || openLibraryCover;
+      const author = rec.authors || localMatch?.author || "Unknown Author";
+      const cover = resolveBookCover({
+        title: rec.title,
+        author,
+        primaryCover: localMatch?.cover,
+        isbn: rec.isbn13 || rec.isbn,
+      });
 
       return {
         title: rec.title,
-        author: rec.authors || "Unknown Author",
+        author,
         description: localMatch?.description || "No description available.",
         cover,
         genre: localMatch?.genre || "Unknown Genre",

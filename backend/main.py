@@ -62,6 +62,100 @@ similarity_matrix = cosine_similarity(tfidf_matrix)
 GOOGLE_BOOKS_CACHE_TTL_SECONDS = 60 * 30
 google_books_cache = {}
 
+GENRE_QUERY_ALIASES = {
+    "thriller": "thriller",
+    "thrillers": "thriller",
+    "mystery": "mystery",
+    "mysteries": "mystery",
+    "fantasy": "fantasy",
+    "romance": "romance",
+    "romantic": "romance",
+    "science fiction": "science fiction",
+    "sci fi": "science fiction",
+    "sci-fi": "science fiction",
+    "scifi": "science fiction",
+    "literary fiction": "literary fiction",
+    "historical fiction": "historical fiction",
+    "memoir": "memoir",
+    "biography": "biography",
+    "adventure": "adventure",
+    "poetry": "poetry",
+    "philosophy": "philosophy",
+    "self help": "self help",
+    "self-help": "self help",
+}
+
+GENRE_DISCOVERY_QUERIES = {
+    "thriller": [
+        'subject:"Thrillers"',
+        'subject:"Psychological fiction"',
+    ],
+    "mystery": [
+        'subject:"Mystery fiction"',
+        'subject:"Detective and mystery stories"',
+    ],
+    "fantasy": [
+        'subject:"Fantasy fiction"',
+        'subject:"Magic"',
+    ],
+    "romance": [
+        'subject:"Romance"',
+        'subject:"Love stories"',
+    ],
+    "science fiction": [
+        'subject:"Science fiction"',
+        'subject:"Space warfare"',
+    ],
+    "literary fiction": [
+        'subject:"Literary Collections"',
+        'subject:"Domestic fiction"',
+    ],
+    "historical fiction": [
+        'subject:"Historical fiction"',
+        'subject:"History"',
+    ],
+    "memoir": [
+        'subject:"Memoir"',
+        'subject:"Autobiography"',
+    ],
+    "biography": [
+        'subject:"Biography & Autobiography"',
+        'subject:"Biographical"',
+    ],
+    "adventure": [
+        'subject:"Adventure stories"',
+        'subject:"Explorers"',
+    ],
+    "poetry": [
+        'subject:"Poetry"',
+        'subject:"Poets"',
+    ],
+    "philosophy": [
+        'subject:"Philosophy"',
+        'subject:"Ethics"',
+    ],
+    "self help": [
+        'subject:"Self-Help"',
+        'subject:"Personal growth"',
+    ],
+}
+
+GENRE_FALLBACK_KEYWORDS = {
+    "thriller": ["thriller", "mystery", "crime", "suspense"],
+    "mystery": ["mystery", "detective", "crime", "suspense"],
+    "fantasy": ["fantasy", "magic", "dragon", "myth"],
+    "romance": ["romance", "love", "relationship"],
+    "science fiction": ["science fiction", "space", "future", "alien"],
+    "literary fiction": ["literary", "fiction", "novel"],
+    "historical fiction": ["history", "historical", "war"],
+    "memoir": ["memoir", "personal", "life"],
+    "biography": ["biography", "autobiography", "life"],
+    "adventure": ["adventure", "journey", "quest", "expedition"],
+    "poetry": ["poetry", "poems", "poet"],
+    "philosophy": ["philosophy", "meaning", "ethics"],
+    "self help": ["self help", "success", "growth", "habit"],
+}
+
 
 def build_book_payload(book_row):
     def serialize_value(value):
@@ -80,6 +174,11 @@ def build_book_payload(book_row):
         "isbn": serialize_value(book_row["isbn"]),
         "isbn13": serialize_value(book_row["isbn13"]),
     }
+
+
+def resolve_genre_query(query: str):
+    normalized_query = normalize_text(query)
+    return GENRE_QUERY_ALIASES.get(normalized_query)
 
 
 def get_suggestion_score(title: str, query: str) -> int:
@@ -289,6 +388,9 @@ def find_google_seed_book(book_title: str, author: str = ""):
 
 
 def resolve_source_book(book_title: str, author: str = ""):
+    if not author and resolve_genre_query(book_title):
+        return None
+
     index = find_book_index(book_title)
     if index is not None:
         return build_book_payload(df.loc[index])
@@ -369,7 +471,68 @@ def recommend_from_google_books(book_title: str, author: str = "", n: int = 12):
     return recommendations
 
 
+def fallback_books_for_genre(genre: str, n: int = 12):
+    keywords = GENRE_FALLBACK_KEYWORDS.get(genre, [])
+    if not keywords:
+        return []
+
+    matches = df[
+        df["title"].map(normalize_text).map(lambda value: any(keyword in value for keyword in keywords))
+        | df["publisher"].map(normalize_text).map(lambda value: any(keyword in value for keyword in keywords))
+        | df["authors"].map(normalize_text).map(lambda value: any(keyword in value for keyword in keywords))
+    ]
+
+    if matches.empty:
+        return [
+            build_book_payload(row)
+            for _index, row in df.sort_values("popularity_score", ascending=False).head(n).iterrows()
+        ]
+
+    return [
+        build_book_payload(row)
+        for _index, row in matches.sort_values("popularity_score", ascending=False).head(n).iterrows()
+    ]
+
+
+def discover_books_by_genre(genre: str, n: int = 12):
+    genre_key = resolve_genre_query(genre) or normalize_text(genre)
+    queries = GENRE_DISCOVERY_QUERIES.get(genre_key, [])[:2]
+    recommendations = []
+    seen_titles = set()
+
+    for query in queries:
+        try:
+            data = fetch_json(
+                f"https://www.googleapis.com/books/v1/volumes?q={quote(query)}&orderBy=relevance&maxResults=20&printType=books&langRestrict=en"
+            )
+        except Exception as error:
+            print(f"Google Books genre lookup failed for '{genre}' with query '{query}': {error}")
+            continue
+
+        for item in data.get("items", []):
+            mapped_book = map_google_book(item)
+            candidate_title = normalize_text(mapped_book["title"])
+
+            if not candidate_title or candidate_title in seen_titles:
+                continue
+
+            seen_titles.add(candidate_title)
+            recommendations.append(mapped_book)
+
+            if len(recommendations) >= n:
+                return recommendations
+
+    if recommendations:
+        return recommendations
+
+    return fallback_books_for_genre(genre_key, n=n)
+
+
 def recommend(book_title, author="", n=12):
+    genre_query = resolve_genre_query(book_title) if not author else None
+    if genre_query:
+        return discover_books_by_genre(genre_query, n=n)
+
     dataset_recommendations = recommend_from_dataset(book_title, author=author, n=n)
     if dataset_recommendations:
         return dataset_recommendations

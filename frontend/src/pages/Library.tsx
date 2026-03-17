@@ -3,23 +3,120 @@ import { motion } from "framer-motion";
 import { ArrowLeft, BookOpen, Library as LibraryIcon, MessageSquare, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import BookDetailsModal from "@/components/BookDetailsModal";
+import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { getFallbackCover } from "@/lib/covers";
-import { getStoredLibrary, getStoredReview, saveLibrary, type SavedBook } from "@/lib/library";
+import { applyFallbackCover, resolveBookCover } from "@/lib/covers";
+import {
+  clearReadingProgress,
+  getStoredLibrary,
+  getStoredReadingProgressMap,
+  getStoredReadingProgress,
+  getStoredReview,
+  saveReadingProgress,
+  saveLibrary,
+  type ReadingStatus,
+  type ReadingProgressEntry,
+  type SavedBook,
+} from "@/lib/library";
+
+type LibraryFilter = "all" | "not-started" | "reading" | "completed";
 
 const Library = () => {
   const [libraryBooks, setLibraryBooks] = useState<SavedBook[]>([]);
   const [selectedBook, setSelectedBook] = useState<SavedBook | null>(null);
+  const [draftProgress, setDraftProgress] = useState<Record<string, ReadingProgressEntry | null>>({});
+  const [activeFilter, setActiveFilter] = useState<LibraryFilter>("all");
   const { toast } = useToast();
 
   useEffect(() => {
     setLibraryBooks(getStoredLibrary());
+    setDraftProgress(getStoredReadingProgressMap());
   }, []);
+
+  const syncStoredProgress = () => {
+    setDraftProgress(getStoredReadingProgressMap());
+  };
+
+  const updateDraftProgress = (title: string, progress: number) => {
+    setDraftProgress((current) => {
+      const existing = current[title] ?? null;
+      const nextProgress = Math.min(100, Math.max(0, Math.round(progress)));
+
+      return {
+        ...current,
+        [title]: existing
+          ? {
+              ...existing,
+              progress: nextProgress,
+              status: nextProgress >= 100 ? "completed" : "reading",
+            }
+          : {
+              title,
+              progress: nextProgress,
+              status: nextProgress >= 100 ? "completed" : "reading",
+            },
+      };
+    });
+  };
+
+  const persistProgress = (book: SavedBook, progress: number, status: ReadingStatus) => {
+    const nextProgress = Math.min(100, Math.max(0, Math.round(progress)));
+
+    saveReadingProgress({
+      title: book.title,
+      progress: nextProgress,
+      status,
+    });
+
+    setDraftProgress((current) => ({
+      ...current,
+      [book.title]: {
+        title: book.title,
+        progress: nextProgress,
+        status: nextProgress >= 100 ? "completed" : status,
+      },
+    }));
+  };
+
+  const handleStartReading = (book: SavedBook) => {
+    const progress = draftProgress[book.title]?.progress ?? 0;
+    persistProgress(book, progress, "reading");
+    toast({
+      title: "Reading tracker started",
+      description: `${book.title} is now on your reading list.`,
+    });
+  };
+
+  const handleUpdateProgress = (book: SavedBook) => {
+    const progress = draftProgress[book.title]?.progress ?? 0;
+    const nextStatus: ReadingStatus = progress >= 100 ? "completed" : "reading";
+
+    persistProgress(book, progress, nextStatus);
+    toast({
+      title: "Progress updated",
+      description: `${book.title} is now ${progress}% complete.`,
+    });
+  };
+
+  const handleMarkCompleted = (book: SavedBook) => {
+    persistProgress(book, 100, "completed");
+    toast({
+      title: "Book completed",
+      description: `You marked ${book.title} as completed.`,
+    });
+  };
 
   const handleRemoveBook = (title: string) => {
     const updatedBooks = libraryBooks.filter((book) => book.title !== title);
     saveLibrary(updatedBooks);
+    clearReadingProgress(title);
     setLibraryBooks(updatedBooks);
+    setDraftProgress((current) => {
+      const next = { ...current };
+      delete next[title];
+      return next;
+    });
 
     if (selectedBook?.title === title) {
       setSelectedBook(null);
@@ -30,6 +127,46 @@ const Library = () => {
       description: `${title} was removed from your saved books.`,
     });
   };
+
+  const getBookProgress = (title: string) => draftProgress[title] ?? getStoredReadingProgress(title);
+
+  const getFilterCount = (filter: LibraryFilter) => {
+    if (filter === "all") {
+      return libraryBooks.length;
+    }
+
+    return libraryBooks.filter((book) => {
+      const progress = getBookProgress(book.title);
+
+      if (filter === "not-started") {
+        return !progress;
+      }
+
+      if (filter === "reading") {
+        return progress?.status === "reading";
+      }
+
+      return progress?.status === "completed";
+    }).length;
+  };
+
+  const filteredBooks = libraryBooks.filter((book) => {
+    const progress = getBookProgress(book.title);
+
+    if (activeFilter === "all") {
+      return true;
+    }
+
+    if (activeFilter === "not-started") {
+      return !progress;
+    }
+
+    if (activeFilter === "reading") {
+      return progress?.status === "reading";
+    }
+
+    return progress?.status === "completed";
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -88,9 +225,56 @@ const Library = () => {
             </Link>
           </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {libraryBooks.map((book, index) => {
+          <>
+            <div className="mb-8 flex flex-col gap-4 rounded-3xl border border-border/70 bg-card/70 p-5 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Filter your shelf</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Jump between unread saves, active reads, and completed books.
+                </p>
+              </div>
+
+              <Tabs
+                value={activeFilter}
+                onValueChange={(value) => setActiveFilter(value as LibraryFilter)}
+                className="w-full lg:w-auto"
+              >
+                <TabsList className="grid h-auto w-full grid-cols-2 gap-2 rounded-2xl bg-background/70 p-2 lg:w-auto lg:grid-cols-4">
+                  <TabsTrigger value="all" className="rounded-xl px-4 py-2.5">
+                    All ({getFilterCount("all")})
+                  </TabsTrigger>
+                  <TabsTrigger value="not-started" className="rounded-xl px-4 py-2.5">
+                    Not Started ({getFilterCount("not-started")})
+                  </TabsTrigger>
+                  <TabsTrigger value="reading" className="rounded-xl px-4 py-2.5">
+                    Reading ({getFilterCount("reading")})
+                  </TabsTrigger>
+                  <TabsTrigger value="completed" className="rounded-xl px-4 py-2.5">
+                    Completed ({getFilterCount("completed")})
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
+            {filteredBooks.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-border bg-card/60 px-8 py-16 text-center">
+                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                  <BookOpen className="h-8 w-8 text-primary" />
+                </div>
+                <h2 className="text-2xl font-semibold">No books in this filter yet</h2>
+                <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
+                  {activeFilter === "not-started" && "Every saved book has reading activity right now."}
+                  {activeFilter === "reading" && "Start a book or update progress to see active reads here."}
+                  {activeFilter === "completed" && "Finish a book to build out your completed shelf."}
+                  {activeFilter === "all" && "Your saved books will show up here."}
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {filteredBooks.map((book, index) => {
               const review = getStoredReview(book.title);
+              const storedProgress = getStoredReadingProgress(book.title);
+              const progress = draftProgress[book.title] ?? storedProgress;
 
               return (
                 <motion.article
@@ -112,16 +296,14 @@ const Library = () => {
 
                       <div className="relative rounded-2xl border border-white/10 bg-black/20 p-3 shadow-2xl shadow-black/30 transition duration-300 group-hover:-translate-y-1">
                         <img
-                          src={book.cover}
+                          src={resolveBookCover({
+                            title: book.title,
+                            author: book.author,
+                            primaryCover: book.cover,
+                          })}
                           alt={book.title}
                           className="h-40 w-28 rounded-lg object-cover shadow-lg"
-                          onError={(event) => {
-                            const target = event.currentTarget;
-                            const fallbackCover = getFallbackCover(book.title, book.author);
-                            if (target.src !== fallbackCover) {
-                              target.src = fallbackCover;
-                            }
-                          }}
+                          onError={(event) => applyFallbackCover(event, book.title, book.author)}
                         />
                       </div>
                     </div>
@@ -140,6 +322,79 @@ const Library = () => {
                     <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
                       {book.description || "No description available."}
                     </p>
+
+                    <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium">Reading Progress</div>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            progress?.status === "completed"
+                              ? "bg-emerald-500/15 text-emerald-300"
+                              : progress?.status === "reading"
+                                ? "bg-primary/15 text-primary"
+                                : "bg-white/5 text-muted-foreground"
+                          }`}
+                        >
+                          {progress?.status === "completed"
+                            ? "Completed"
+                            : progress?.status === "reading"
+                              ? `${progress.progress}% completed`
+                              : "Not started"}
+                        </span>
+                      </div>
+                      <div className="h-3 overflow-hidden rounded-full bg-white/10">
+                        <motion.div
+                          className="h-full rounded-full bg-gradient-to-r from-primary via-primary to-cyan-400"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${progress?.progress ?? 0}%` }}
+                          transition={{ duration: 0.4, delay: 0.08 + index * 0.03 }}
+                        />
+                      </div>
+
+                      <div className="mt-4 space-y-4">
+                        <div>
+                          <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                            <span>Update Progress</span>
+                            <span>{progress?.progress ?? 0}%</span>
+                          </div>
+                          <Slider
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={[progress?.progress ?? 0]}
+                            onValueChange={([value]) => updateDraftProgress(book.title, value)}
+                            className="w-full"
+                          />
+                        </div>
+
+                        <div className="flex flex-wrap gap-3">
+                          {!storedProgress && (
+                            <button
+                              onClick={() => handleStartReading(book)}
+                              className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                            >
+                              Start Reading
+                            </button>
+                          )}
+                          {storedProgress && (
+                            <button
+                              onClick={() => handleUpdateProgress(book)}
+                              className="rounded-xl border border-border px-4 py-2 text-sm font-medium transition hover:bg-muted"
+                            >
+                              Update Progress
+                            </button>
+                          )}
+                          {storedProgress?.status !== "completed" && (
+                            <button
+                              onClick={() => handleMarkCompleted(book)}
+                              className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/20"
+                            >
+                              Mark as Completed
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
 
                     <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
                       <div className="mb-2 flex items-center gap-2 text-sm font-medium">
@@ -169,8 +424,10 @@ const Library = () => {
                   </div>
                 </motion.article>
               );
-            })}
-          </div>
+                })}
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -179,6 +436,7 @@ const Library = () => {
         onClose={() => {
           setSelectedBook(null);
           setLibraryBooks(getStoredLibrary());
+          syncStoredProgress();
         }}
       />
     </div>

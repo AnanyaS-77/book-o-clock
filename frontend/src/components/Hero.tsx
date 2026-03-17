@@ -15,6 +15,7 @@ const Hero = ({ onSearch, isSearching = false }: HeroProps) => {
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const suggestionsCacheRef = useRef<Map<string, string[]>>(new Map());
 
   const handleSearch = async () => {
@@ -26,10 +27,13 @@ const Hero = ({ onSearch, isSearching = false }: HeroProps) => {
     await onSearch(trimmedQuery);
   };
 
-  const handleSuggestionSelect = async (suggestion: string) => {
+  const handleSuggestionSelect = (suggestion: string) => {
     setQuery(suggestion);
     setIsSuggestionsOpen(false);
-    await onSearch(suggestion);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(suggestion.length, suggestion.length);
+    });
   };
 
   useEffect(() => {
@@ -164,8 +168,15 @@ const Hero = ({ onSearch, isSearching = false }: HeroProps) => {
           className="relative z-40 max-w-xl mx-auto"
           ref={searchContainerRef}
         >
-          <div className="flex items-center rounded-2xl bg-secondary/80 backdrop-blur-xl border border-border glow-border overflow-hidden">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSearch();
+            }}
+            className="flex items-center rounded-2xl bg-secondary/80 backdrop-blur-xl border border-border glow-border overflow-hidden"
+          >
             <input
+              ref={inputRef}
               type="text"
               placeholder="Search for a book, author, or genre..."
               value={query}
@@ -175,19 +186,11 @@ const Hero = ({ onSearch, isSearching = false }: HeroProps) => {
                   setIsSuggestionsOpen(true);
                 }
               }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void handleSearch();
-                }
-              }}
               className="flex-1 px-6 py-4 bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none text-base"
             />
 
             <button
-              onClick={() => {
-                void handleSearch();
-              }}
+              type="submit"
               disabled={isSearching}
               className={`flex items-center gap-2 px-6 py-4 font-medium transition-opacity ${
                 isSearching
@@ -198,7 +201,7 @@ const Hero = ({ onSearch, isSearching = false }: HeroProps) => {
               <Search className={`w-5 h-5 ${isSearching ? "animate-pulse" : ""}`} />
               <span className="hidden sm:inline">{isSearching ? "Searching..." : "Search"}</span>
             </button>
-          </div>
+          </form>
 
           <AnimatePresence>
             {isSuggestionsOpen && (
@@ -230,7 +233,7 @@ const Hero = ({ onSearch, isSearching = false }: HeroProps) => {
                         key={suggestion}
                         onMouseDown={(event) => {
                           event.preventDefault();
-                          void handleSuggestionSelect(suggestion);
+                          handleSuggestionSelect(suggestion);
                         }}
                         className="flex w-full items-center justify-between px-4 py-3 text-sm text-slate-100 transition hover:bg-white/5 hover:text-white"
                       >

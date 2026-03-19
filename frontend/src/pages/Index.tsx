@@ -7,20 +7,29 @@ import TrendingBooksRow from "@/components/TrendingBooksRow";
 import MoodSelector from "@/components/MoodSelector";
 import QuoteCarousel from "@/components/QuoteCarousel";
 import BookDetailsModal from "@/components/BookDetailsModal";
+import PersonalizedRecommendationsRow from "@/components/PersonalizedRecommendationsRow";
 import SearchEmptyState from "@/components/SearchEmptyState";
 import { books as localBooks, type Book } from "@/data/books";
 import { resolveBookCover } from "@/lib/covers";
 import { moodDiscoveryMap, type DiscoveryBook } from "@/lib/discovery";
-import { getStoredLibrary, getStoredReadingProgressMap } from "@/lib/library";
+import {
+  LIBRARY_UPDATED_EVENT,
+  getPreferredGenreProfile,
+  getStoredLibrary,
+  getStoredReadingProgressMap,
+} from "@/lib/library";
 
 const Index = () => {
 
   const [searchRecommendations, setSearchRecommendations] = useState<DiscoveryBook[]>([]);
   const [moodRecommendations, setMoodRecommendations] = useState<DiscoveryBook[]>([]);
   const [continueReadingBooks, setContinueReadingBooks] = useState<ContinueReadingBook[]>([]);
+  const [personalizedBooks, setPersonalizedBooks] = useState<DiscoveryBook[]>([]);
+  const [preferredGenre, setPreferredGenre] = useState("");
   const [activeMood, setActiveMood] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [loadingMood, setLoadingMood] = useState("");
+  const [isLoadingPersonalized, setIsLoadingPersonalized] = useState(false);
   const [lastSearchQuery, setLastSearchQuery] = useState("");
   const [hasCompletedSearch, setHasCompletedSearch] = useState(false);
   const [selectedBook, setSelectedBook] = useState<any | null>(null);
@@ -73,7 +82,48 @@ const Index = () => {
         rating: rec.average_rating || "N/A",
         pages: rec.num_pages || "N/A",
       };
-    });
+    }).filter((book, index, allBooks) =>
+      allBooks.findIndex((candidate) => candidate.title === book.title) === index
+    );
+  };
+
+  const loadPersonalizedRecommendations = async () => {
+    const genreProfile = getPreferredGenreProfile();
+
+    if (!genreProfile) {
+      setPreferredGenre("");
+      setPersonalizedBooks([]);
+      setIsLoadingPersonalized(false);
+      return;
+    }
+
+    setPreferredGenre(genreProfile.genre);
+    setIsLoadingPersonalized(true);
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:8000/recommend?book=${encodeURIComponent(genreProfile.genre)}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Personalized recommendation request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      const libraryTitles = new Set(
+        getStoredLibrary().map((book) => book.title.trim().toLowerCase())
+      );
+      const recommendationCards = mapApiBooksToCards(data.recommendations || []).filter(
+        (book) => !libraryTitles.has(book.title.trim().toLowerCase())
+      );
+
+      setPersonalizedBooks(recommendationCards.slice(0, 10));
+    } catch (error) {
+      console.error("Unable to load personalized recommendations:", error);
+      setPersonalizedBooks([]);
+    } finally {
+      setIsLoadingPersonalized(false);
+    }
   };
 
   const getRecommendations = async (query: string) => {
@@ -129,19 +179,23 @@ const Index = () => {
 
   useEffect(() => {
     loadContinueReadingBooks();
+    void loadPersonalizedRecommendations();
   }, []);
 
   useEffect(() => {
-    const syncContinueReading = () => {
+    const syncHomeRows = () => {
       loadContinueReadingBooks();
+      void loadPersonalizedRecommendations();
     };
 
-    window.addEventListener("focus", syncContinueReading);
-    window.addEventListener("storage", syncContinueReading);
+    window.addEventListener("focus", syncHomeRows);
+    window.addEventListener("storage", syncHomeRows);
+    window.addEventListener(LIBRARY_UPDATED_EVENT, syncHomeRows);
 
     return () => {
-      window.removeEventListener("focus", syncContinueReading);
-      window.removeEventListener("storage", syncContinueReading);
+      window.removeEventListener("focus", syncHomeRows);
+      window.removeEventListener("storage", syncHomeRows);
+      window.removeEventListener(LIBRARY_UPDATED_EVENT, syncHomeRows);
     };
   }, []);
 
@@ -205,6 +259,14 @@ const Index = () => {
       <Hero onSearch={getRecommendations} isSearching={isSearching} />
 
       <ContinueReadingRow books={continueReadingBooks} onBookClick={handleOpenBook} />
+
+      {!isLoadingPersonalized && personalizedBooks.length > 0 && preferredGenre && (
+        <PersonalizedRecommendationsRow
+          books={personalizedBooks}
+          genre={preferredGenre}
+          onBookClick={handleOpenBook}
+        />
+      )}
 
       <div ref={searchResultsRef}>
         <RecommendationGrid

@@ -1,7 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Library, Search } from "lucide-react";
+import { Library, LogOut, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/components/auth/AuthProvider";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { buildApiUrl } from "@/lib/api";
 
 interface HeroProps {
   onSearch: (query: string) => Promise<void>;
@@ -17,6 +21,8 @@ const Hero = ({ onSearch, isSearching = false }: HeroProps) => {
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const suggestionsCacheRef = useRef<Map<string, string[]>>(new Map());
+  const { user, signOut } = useAuth();
+  const { toast } = useToast();
 
   const handleSearch = async () => {
     const trimmedQuery = query.trim();
@@ -62,7 +68,7 @@ const Hero = ({ onSearch, isSearching = false }: HeroProps) => {
 
       try {
         const response = await fetch(
-          `http://127.0.0.1:8000/search/suggestions?query=${encodeURIComponent(trimmedQuery)}&limit=${MAX_SUGGESTIONS}`,
+          buildApiUrl(`/search/suggestions?query=${encodeURIComponent(trimmedQuery)}&limit=${MAX_SUGGESTIONS}`),
           { signal: controller.signal }
         );
 
@@ -113,6 +119,14 @@ const Hero = ({ onSearch, isSearching = false }: HeroProps) => {
     };
   }, []);
 
+  const handleSignOut = async () => {
+    await signOut();
+    toast({
+      title: "Signed out",
+      description: "You can still browse books. Sign in again to save your shelf.",
+    });
+  };
+
   return (
     <motion.section
       className="relative flex min-h-[85vh] items-center justify-center overflow-x-hidden overflow-y-visible"
@@ -131,14 +145,35 @@ const Hero = ({ onSearch, isSearching = false }: HeroProps) => {
       />
 
       <div className="absolute left-0 top-0 z-20 w-full px-6 py-6">
-        <div className="mx-auto flex max-w-7xl justify-end">
-          <Link
-            to="/library"
-            className="inline-flex items-center gap-3 rounded-full border border-border/70 bg-background/70 px-6 py-3 text-base font-semibold text-foreground shadow-lg shadow-black/20 backdrop-blur-xl transition hover:border-primary hover:bg-card"
-          >
-            <Library className="h-5 w-5" />
-            My Library
-          </Link>
+        <div className="mx-auto flex max-w-7xl justify-end gap-3">
+          {user ? (
+            <>
+              <Link
+                to="/library"
+                className="inline-flex items-center gap-3 rounded-full border border-border/70 bg-background/70 px-6 py-3 text-base font-semibold text-foreground shadow-lg shadow-black/20 backdrop-blur-xl transition hover:border-primary hover:bg-card"
+              >
+                <Library className="h-5 w-5" />
+                My Library
+              </Link>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleSignOut()}
+                className="rounded-full border-border/70 bg-background/70 px-5 py-3 text-base shadow-lg shadow-black/20 backdrop-blur-xl"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign Out
+              </Button>
+            </>
+          ) : (
+            <Link
+              to="/auth"
+              className="inline-flex items-center gap-3 rounded-full border border-border/70 bg-background/70 px-6 py-3 text-base font-semibold text-foreground shadow-lg shadow-black/20 backdrop-blur-xl transition hover:border-primary hover:bg-card"
+            >
+              <Library className="h-5 w-5" />
+              Sign In
+            </Link>
+          )}
         </div>
       </div>
 

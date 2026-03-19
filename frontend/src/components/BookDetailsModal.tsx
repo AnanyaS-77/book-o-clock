@@ -1,10 +1,12 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ShoppingCart, BookOpen, ArrowLeft } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { books as localBooks } from "@/data/books";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
+import { buildApiUrl } from "@/lib/api";
 import { applyFallbackCover, resolveBookCover } from "@/lib/covers";
 import { generateInsight } from "@/lib/generateInsight";
 import {
@@ -42,6 +44,8 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   const modalContentRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useAuth();
 
   useEffect(() => {
     if (book) {
@@ -101,7 +105,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
         }
 
         const res = await fetch(
-          `http://127.0.0.1:8000/recommend?${query.toString()}`
+          buildApiUrl(`/recommend?${query.toString()}`)
         );
 
         if (!res.ok) {
@@ -180,8 +184,29 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
     onSelectBook(similarBook);
   };
 
+  const requireAuth = () => {
+    if (user) {
+      return true;
+    }
+
+    toast({
+      title: "Sign in required",
+      description: "Create an account to save books, track progress, rate titles, and keep reviews.",
+      action: (
+        <ToastAction
+          altText="Open sign in"
+          onClick={() => navigate("/auth", { state: { from: location } })}
+        >
+          Sign In
+        </ToastAction>
+      ),
+    });
+
+    return false;
+  };
+
   const handleToggleLibrary = () => {
-    if (!book) return;
+    if (!book || !requireAuth()) return;
 
     const library = getStoredLibrary();
     const alreadySaved = library.some((libraryBook) => libraryBook.title === book.title);
@@ -221,7 +246,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   };
 
   const ensureBookInLibrary = () => {
-    if (!book) return;
+    if (!book || !requireAuth()) return;
 
     const library = getStoredLibrary();
     const alreadySaved = library.some((libraryBook) => libraryBook.title === book.title);
@@ -235,7 +260,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   };
 
   const persistReadingProgress = (progress: number, status: ReadingStatus) => {
-    if (!book) return;
+    if (!book || !requireAuth()) return;
 
     ensureBookInLibrary();
     saveReadingProgress({
@@ -248,7 +273,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   };
 
   const handleStartReading = () => {
-    if (!book) return;
+    if (!book || !requireAuth()) return;
 
     persistReadingProgress(readingProgress, "reading");
     toast({
@@ -265,7 +290,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   };
 
   const handleUpdateProgress = () => {
-    if (!book) return;
+    if (!book || !requireAuth()) return;
 
     const nextStatus: ReadingStatus = readingProgress >= 100 ? "completed" : "reading";
     persistReadingProgress(readingProgress, nextStatus);
@@ -276,7 +301,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   };
 
   const handleMarkCompleted = () => {
-    if (!book) return;
+    if (!book || !requireAuth()) return;
 
     persistReadingProgress(100, "completed");
     toast({
@@ -286,7 +311,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   };
 
   const handleReviewSave = () => {
-    if (!book) return;
+    if (!book || !requireAuth()) return;
 
     const trimmedReview = reviewDraft.trim();
 
@@ -399,7 +424,10 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
                         key={star}
-                        onClick={() => handleRatingClick(star)}
+                        onClick={() => {
+                          if (!requireAuth()) return;
+                          handleRatingClick(star);
+                        }}
                         className="text-yellow-400 hover:text-yellow-300 transition text-lg"
                       >
                         {star <= rating ? "★" : "☆"}
@@ -460,7 +488,10 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
                     </button>
 
                     <button
-                      onClick={() => setIsReviewing(true)}
+                      onClick={() => {
+                        if (!requireAuth()) return;
+                        setIsReviewing(true);
+                      }}
                       className="px-6 py-2 rounded-lg hover:bg-muted transition"
                     >
                       {savedReview ? "Edit Review" : "Write Review"}

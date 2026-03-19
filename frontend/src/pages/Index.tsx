@@ -10,6 +10,7 @@ import BookDetailsModal from "@/components/BookDetailsModal";
 import PersonalizedRecommendationsRow from "@/components/PersonalizedRecommendationsRow";
 import SearchEmptyState from "@/components/SearchEmptyState";
 import { books as localBooks, type Book } from "@/data/books";
+import { buildApiUrl } from "@/lib/api";
 import { resolveBookCover } from "@/lib/covers";
 import { moodDiscoveryMap, type DiscoveryBook } from "@/lib/discovery";
 import {
@@ -102,7 +103,7 @@ const Index = () => {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/recommend?book=${encodeURIComponent(genreProfile.genre)}`
+        buildApiUrl(`/recommend?book=${encodeURIComponent(genreProfile.genre)}`)
       );
 
       if (!response.ok) {
@@ -132,7 +133,7 @@ const Index = () => {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/recommend?book=${encodeURIComponent(query)}`
+        buildApiUrl(`/recommend?book=${encodeURIComponent(query)}`)
       );
 
       const data = await response.json();
@@ -161,7 +162,7 @@ const Index = () => {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/discover/mood?mood=${encodeURIComponent(mood)}`
+        buildApiUrl(`/discover/mood?mood=${encodeURIComponent(mood)}`)
       );
 
       if (!response.ok) {

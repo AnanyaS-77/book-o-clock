@@ -123,6 +123,11 @@ const mapEntryToRow = (userId: string, entry: ShelfEntry) => ({
   reading_status: entry.readingStatus,
 });
 
+const mergeEntry = (entries: ShelfEntry[], nextEntry: ShelfEntry) => {
+  const filtered = entries.filter((entry) => entry.title !== nextEntry.title);
+  return [nextEntry, ...filtered];
+};
+
 const buildLocalEntries = (): ShelfEntry[] => {
   const library = getStoredLibrary();
   const progressMap = getStoredReadingProgressMap();
@@ -231,17 +236,21 @@ export const UserShelfProvider = ({ children }: Props) => {
 
   const persistRemoteEntry = async (entry: ShelfEntry) => {
     if (!user || !isConfigured) {
-      return;
+      return entry;
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("user_books")
-      .upsert(mapEntryToRow(user.id, entry), { onConflict: "user_id,title" });
+      .upsert(mapEntryToRow(user.id, entry), { onConflict: "user_id,title" })
+      .select()
+      .single();
 
     if (error) {
       console.error("Unable to persist shelf entry:", error);
       throw error;
     }
+
+    return mapRowToEntry(data);
   };
 
   const persistLocalEntry = async (entry: ShelfEntry) => {
@@ -280,13 +289,11 @@ export const UserShelfProvider = ({ children }: Props) => {
     const existing = entries.find((entry) => entry.title === book.title) ?? null;
     const nextEntry = updater(existing);
 
-    setEntries((current) => {
-      const filtered = current.filter((entry) => entry.title !== nextEntry.title);
-      return [nextEntry, ...filtered];
-    });
+    setEntries((current) => mergeEntry(current, nextEntry));
 
     if (user && isConfigured) {
-      await persistRemoteEntry(nextEntry);
+      const persistedEntry = await persistRemoteEntry(nextEntry);
+      setEntries((current) => mergeEntry(current, persistedEntry));
       return;
     }
 

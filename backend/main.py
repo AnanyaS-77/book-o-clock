@@ -1,20 +1,34 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from difflib import SequenceMatcher, get_close_matches
 import json
 import os
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 import re
 import time
+from difflib import SequenceMatcher, get_close_matches
 from urllib.parse import quote
 from urllib.request import urlopen
 
+import pandas as pd
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
 app = FastAPI()
+
+
+def get_allowed_origins():
+    raw_value = os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173"
+    )
+    return [origin.strip() for origin in raw_value.split(",") if origin.strip()]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

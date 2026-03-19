@@ -153,6 +153,10 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
     setRating(star);
     if (book) {
       await saveBookRating(book, star);
+      toast({
+        title: "Rating saved",
+        description: `You rated ${book.title} ${star} out of 5.`,
+      });
     }
   };
 

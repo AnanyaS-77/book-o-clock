@@ -12,6 +12,7 @@ export interface SavedBook {
 export const LIBRARY_STORAGE_KEY = "book-o-clock-library";
 export const REVIEW_STORAGE_PREFIX = "review-";
 export const READING_PROGRESS_STORAGE_KEY = "book-o-clock-reading-progress";
+export const RATING_STORAGE_PREFIX = "rating-";
 export const LIBRARY_UPDATED_EVENT = "book-o-clock:library-updated";
 
 export type ReadingStatus = "reading" | "completed";
@@ -104,6 +105,58 @@ export const saveReview = (title: string, review: string) => {
   localStorage.setItem(`${REVIEW_STORAGE_PREFIX}${title}`, review);
 };
 
+export const getStoredRating = (title: string) => {
+  const stored = localStorage.getItem(`${RATING_STORAGE_PREFIX}${title}`);
+  return stored ? parseInt(stored, 10) : 0;
+};
+
+export const saveStoredRating = (title: string, rating: number) => {
+  localStorage.setItem(`${RATING_STORAGE_PREFIX}${title}`, rating.toString());
+};
+
+export const getStoredReviewsMap = () => {
+  const reviews: Record<string, string> = {};
+
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+
+    if (!key?.startsWith(REVIEW_STORAGE_PREFIX)) {
+      continue;
+    }
+
+    const title = key.slice(REVIEW_STORAGE_PREFIX.length);
+    const review = localStorage.getItem(key) ?? "";
+
+    if (title && review) {
+      reviews[title] = review;
+    }
+  }
+
+  return reviews;
+};
+
+export const getStoredRatingsMap = () => {
+  const ratings: Record<string, number> = {};
+
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+
+    if (!key?.startsWith(RATING_STORAGE_PREFIX)) {
+      continue;
+    }
+
+    const title = key.slice(RATING_STORAGE_PREFIX.length);
+    const value = localStorage.getItem(key);
+    const rating = value ? parseInt(value, 10) : 0;
+
+    if (title && !Number.isNaN(rating)) {
+      ratings[title] = rating;
+    }
+  }
+
+  return ratings;
+};
+
 const normalizeGenreLabel = (genre?: string) => {
   if (!genre) {
     return "";
@@ -121,9 +174,10 @@ export interface PersonalizedGenreProfile {
   observedBooks: number;
 }
 
-export const getPreferredGenreProfile = (): PersonalizedGenreProfile | null => {
-  const library = getStoredLibrary();
-  const progressMap = getStoredReadingProgressMap();
+export const computePreferredGenreProfile = (
+  library: SavedBook[],
+  progressMap: Record<string, ReadingProgressEntry>
+): PersonalizedGenreProfile | null => {
   const genreCounts = new Map<string, number>();
   let observedBooks = 0;
 
@@ -159,4 +213,8 @@ export const getPreferredGenreProfile = (): PersonalizedGenreProfile | null => {
     confidence,
     observedBooks,
   };
+};
+
+export const getPreferredGenreProfile = (): PersonalizedGenreProfile | null => {
+  return computePreferredGenreProfile(getStoredLibrary(), getStoredReadingProgressMap());
 };

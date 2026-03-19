@@ -3,6 +3,7 @@ import { X, ShoppingCart, BookOpen, ArrowLeft } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useUserShelf } from "@/components/library/UserShelfProvider";
 import { books as localBooks } from "@/data/books";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -10,13 +11,7 @@ import { buildApiUrl } from "@/lib/api";
 import { applyFallbackCover, resolveBookCover } from "@/lib/covers";
 import { generateInsight } from "@/lib/generateInsight";
 import {
-  clearReadingProgress,
-  getStoredLibrary,
-  getStoredReadingProgress,
-  getStoredReview,
-  saveReadingProgress,
-  saveLibrary,
-  saveReview,
+  getStoredRating,
   type ReadingStatus,
   type SavedBook,
 } from "@/lib/library";
@@ -46,6 +41,17 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const {
+    getRating,
+    getReview,
+    isInLibrary: isSavedInLibrary,
+    saveBook,
+    removeBook,
+    saveProgress,
+    saveBookReview,
+    saveBookRating,
+    progressMap,
+  } = useUserShelf();
 
   useEffect(() => {
     if (book) {
@@ -53,14 +59,6 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
     }
   }, [book]);
 
-  const getStoredRating = (title: string) => {
-    const stored = localStorage.getItem(`rating-${title}`);
-    return stored ? parseInt(stored, 10) : 0;
-  };
-
-  const saveRating = (title: string, rate: number) => {
-    localStorage.setItem(`rating-${title}`, rate.toString());
-  };
   useEffect(() => {
   if (book) {
     document.body.style.overflow = "hidden";
@@ -75,19 +73,18 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
 
   useEffect(() => {
     if (book) {
-      setRating(getStoredRating(book.title));
-      const existingReview = getStoredReview(book.title);
-      const storedReadingProgress = getStoredReadingProgress(book.title);
-      const library = getStoredLibrary();
+      const existingReview = getReview(book.title);
+      const storedReadingProgress = progressMap[book.title] ?? null;
 
+      setRating(getRating(book.title) || getStoredRating(book.title));
       setSavedReview(existingReview);
       setReviewDraft(existingReview);
       setIsReviewing(false);
-      setIsInLibrary(library.some((libraryBook) => libraryBook.title === book.title));
+      setIsInLibrary(isSavedInLibrary(book.title));
       setReadingProgress(storedReadingProgress?.progress ?? 0);
       setReadingStatus(storedReadingProgress?.status ?? null);
     }
-  }, [book?.title]);
+  }, [book?.title, getRating, getReview, isSavedInLibrary, progressMap]);
 
   useEffect(() => {
     const fetchSimilarBooks = async () => {
@@ -152,10 +149,10 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
     fetchSimilarBooks();
   }, [book]);
 
-  const handleRatingClick = (star: number) => {
+  const handleRatingClick = async (star: number) => {
     setRating(star);
     if (book) {
-      saveRating(book.title, star);
+      await saveBookRating(book, star);
     }
   };
 
@@ -205,16 +202,13 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
     return false;
   };
 
-  const handleToggleLibrary = () => {
+  const handleToggleLibrary = async () => {
     if (!book || !requireAuth()) return;
 
-    const library = getStoredLibrary();
-    const alreadySaved = library.some((libraryBook) => libraryBook.title === book.title);
+    const alreadySaved = isSavedInLibrary(book.title);
 
     if (alreadySaved) {
-      const updatedLibrary = library.filter((libraryBook) => libraryBook.title !== book.title);
-      saveLibrary(updatedLibrary);
-      clearReadingProgress(book.title);
+      await removeBook(book.title);
       setIsInLibrary(false);
       setReadingProgress(0);
       setReadingStatus(null);
@@ -225,8 +219,7 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
       return;
     }
 
-    const updatedLibrary = [book, ...library.filter((libraryBook) => libraryBook.title !== book.title)];
-    saveLibrary(updatedLibrary);
+    await saveBook(book);
     setIsInLibrary(true);
     toast({
       title: "Added to library",
@@ -245,37 +238,32 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
     });
   };
 
-  const ensureBookInLibrary = () => {
+  const ensureBookInLibrary = async () => {
     if (!book || !requireAuth()) return;
 
-    const library = getStoredLibrary();
-    const alreadySaved = library.some((libraryBook) => libraryBook.title === book.title);
+    const alreadySaved = isSavedInLibrary(book.title);
 
     if (alreadySaved) {
       return;
     }
 
-    saveLibrary([book, ...library]);
+    await saveBook(book);
     setIsInLibrary(true);
   };
 
-  const persistReadingProgress = (progress: number, status: ReadingStatus) => {
+  const persistReadingProgress = async (progress: number, status: ReadingStatus) => {
     if (!book || !requireAuth()) return;
 
-    ensureBookInLibrary();
-    saveReadingProgress({
-      title: book.title,
-      progress,
-      status,
-    });
+    await ensureBookInLibrary();
+    await saveProgress(book, progress, status);
     setReadingProgress(progress);
     setReadingStatus(progress >= 100 ? "completed" : status);
   };
 
-  const handleStartReading = () => {
+  const handleStartReading = async () => {
     if (!book || !requireAuth()) return;
 
-    persistReadingProgress(readingProgress, "reading");
+    await persistReadingProgress(readingProgress, "reading");
     toast({
       title: "Reading tracker started",
       description: `${book.title} is now on your reading list.`,
@@ -289,28 +277,28 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
     }
   };
 
-  const handleUpdateProgress = () => {
+  const handleUpdateProgress = async () => {
     if (!book || !requireAuth()) return;
 
     const nextStatus: ReadingStatus = readingProgress >= 100 ? "completed" : "reading";
-    persistReadingProgress(readingProgress, nextStatus);
+    await persistReadingProgress(readingProgress, nextStatus);
     toast({
       title: "Progress updated",
       description: `${book.title} is now ${readingProgress}% complete.`,
     });
   };
 
-  const handleMarkCompleted = () => {
+  const handleMarkCompleted = async () => {
     if (!book || !requireAuth()) return;
 
-    persistReadingProgress(100, "completed");
+    await persistReadingProgress(100, "completed");
     toast({
       title: "Book completed",
       description: `You marked ${book.title} as completed.`,
     });
   };
 
-  const handleReviewSave = () => {
+  const handleReviewSave = async () => {
     if (!book || !requireAuth()) return;
 
     const trimmedReview = reviewDraft.trim();
@@ -323,13 +311,13 @@ const BookDetailsModal = ({ book, onClose, onSelectBook, onBack, canGoBack = fal
       return;
     }
 
-    saveReview(book.title, trimmedReview);
+    await saveBookReview(book, trimmedReview);
     setSavedReview(trimmedReview);
     setReviewDraft(trimmedReview);
     setIsReviewing(false);
     toast({
       title: "Review saved",
-      description: `Your thoughts on ${book.title} are saved locally.`,
+      description: `Your thoughts on ${book.title} are saved to your account.`,
     });
   };
 

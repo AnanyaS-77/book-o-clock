@@ -9,15 +9,13 @@ import QuoteCarousel from "@/components/QuoteCarousel";
 import BookDetailsModal from "@/components/BookDetailsModal";
 import PersonalizedRecommendationsRow from "@/components/PersonalizedRecommendationsRow";
 import SearchEmptyState from "@/components/SearchEmptyState";
+import { useUserShelf } from "@/components/library/UserShelfProvider";
 import { books as localBooks, type Book } from "@/data/books";
 import { buildApiUrl } from "@/lib/api";
 import { resolveBookCover } from "@/lib/covers";
 import { moodDiscoveryMap, type DiscoveryBook } from "@/lib/discovery";
 import {
-  LIBRARY_UPDATED_EVENT,
-  getPreferredGenreProfile,
-  getStoredLibrary,
-  getStoredReadingProgressMap,
+  computePreferredGenreProfile,
 } from "@/lib/library";
 
 const Index = () => {
@@ -35,31 +33,10 @@ const Index = () => {
   const [hasCompletedSearch, setHasCompletedSearch] = useState(false);
   const [selectedBook, setSelectedBook] = useState<any | null>(null);
   const [bookHistory, setBookHistory] = useState<any[]>([]);
+  const { libraryBooks, progressMap } = useUserShelf();
 
   const searchResultsRef = useRef<HTMLDivElement | null>(null);
   const moodResultsRef = useRef<HTMLDivElement | null>(null);
-
-  const loadContinueReadingBooks = () => {
-    const library = getStoredLibrary();
-    const progressMap = getStoredReadingProgressMap();
-
-    const inProgressBooks = library
-      .map((book) => {
-        const progressEntry = progressMap[book.title];
-
-        if (!progressEntry || progressEntry.progress <= 0 || progressEntry.progress >= 100) {
-          return null;
-        }
-
-        return {
-          ...book,
-          progress: progressEntry.progress,
-        };
-      })
-      .filter((book): book is ContinueReadingBook => Boolean(book));
-
-    setContinueReadingBooks(inProgressBooks);
-  };
 
   const mapApiBooksToCards = (items: any[]) => {
     return items.map((rec: any) => {
@@ -89,7 +66,7 @@ const Index = () => {
   };
 
   const loadPersonalizedRecommendations = async () => {
-    const genreProfile = getPreferredGenreProfile();
+    const genreProfile = computePreferredGenreProfile(libraryBooks, progressMap);
 
     if (!genreProfile) {
       setPreferredGenre("");
@@ -112,7 +89,7 @@ const Index = () => {
 
       const data = await response.json();
       const libraryTitles = new Set(
-        getStoredLibrary().map((book) => book.title.trim().toLowerCase())
+        libraryBooks.map((book) => book.title.trim().toLowerCase())
       );
       const recommendationCards = mapApiBooksToCards(data.recommendations || []).filter(
         (book) => !libraryTitles.has(book.title.trim().toLowerCase())
@@ -179,26 +156,27 @@ const Index = () => {
   };
 
   useEffect(() => {
-    loadContinueReadingBooks();
     void loadPersonalizedRecommendations();
-  }, []);
+  }, [libraryBooks, progressMap]);
 
   useEffect(() => {
-    const syncHomeRows = () => {
-      loadContinueReadingBooks();
-      void loadPersonalizedRecommendations();
-    };
+    const inProgressBooks = libraryBooks
+      .map((book) => {
+        const progressEntry = progressMap[book.title];
 
-    window.addEventListener("focus", syncHomeRows);
-    window.addEventListener("storage", syncHomeRows);
-    window.addEventListener(LIBRARY_UPDATED_EVENT, syncHomeRows);
+        if (!progressEntry || progressEntry.progress <= 0 || progressEntry.progress >= 100) {
+          return null;
+        }
 
-    return () => {
-      window.removeEventListener("focus", syncHomeRows);
-      window.removeEventListener("storage", syncHomeRows);
-      window.removeEventListener(LIBRARY_UPDATED_EVENT, syncHomeRows);
-    };
-  }, []);
+        return {
+          ...book,
+          progress: progressEntry.progress,
+        };
+      })
+      .filter((book): book is ContinueReadingBook => Boolean(book));
+
+    setContinueReadingBooks(inProgressBooks);
+  }, [libraryBooks, progressMap]);
 
   useEffect(() => {
     if (searchRecommendations.length > 0 || hasCompletedSearch) {
@@ -251,7 +229,6 @@ const Index = () => {
   const handleCloseModal = () => {
     setSelectedBook(null);
     setBookHistory([]);
-    loadContinueReadingBooks();
   };
 
   return (

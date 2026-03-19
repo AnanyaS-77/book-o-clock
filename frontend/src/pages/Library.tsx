@@ -5,16 +5,10 @@ import { Link } from "react-router-dom";
 import BookDetailsModal from "@/components/BookDetailsModal";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useUserShelf } from "@/components/library/UserShelfProvider";
 import { useToast } from "@/hooks/use-toast";
 import { applyFallbackCover, resolveBookCover } from "@/lib/covers";
 import {
-  clearReadingProgress,
-  getStoredLibrary,
-  getStoredReadingProgressMap,
-  getStoredReadingProgress,
-  getStoredReview,
-  saveReadingProgress,
-  saveLibrary,
   type ReadingStatus,
   type ReadingProgressEntry,
   type SavedBook,
@@ -23,20 +17,22 @@ import {
 type LibraryFilter = "all" | "not-started" | "reading" | "completed";
 
 const Library = () => {
-  const [libraryBooks, setLibraryBooks] = useState<SavedBook[]>([]);
   const [selectedBook, setSelectedBook] = useState<SavedBook | null>(null);
   const [draftProgress, setDraftProgress] = useState<Record<string, ReadingProgressEntry | null>>({});
   const [activeFilter, setActiveFilter] = useState<LibraryFilter>("all");
   const { toast } = useToast();
+  const {
+    isLoading,
+    libraryBooks,
+    progressMap,
+    getReview,
+    saveProgress,
+    removeBook,
+  } = useUserShelf();
 
   useEffect(() => {
-    setLibraryBooks(getStoredLibrary());
-    setDraftProgress(getStoredReadingProgressMap());
-  }, []);
-
-  const syncStoredProgress = () => {
-    setDraftProgress(getStoredReadingProgressMap());
-  };
+    setDraftProgress(progressMap);
+  }, [progressMap]);
 
   const updateDraftProgress = (title: string, progress: number) => {
     setDraftProgress((current) => {
@@ -63,11 +59,7 @@ const Library = () => {
   const persistProgress = (book: SavedBook, progress: number, status: ReadingStatus) => {
     const nextProgress = Math.min(100, Math.max(0, Math.round(progress)));
 
-    saveReadingProgress({
-      title: book.title,
-      progress: nextProgress,
-      status,
-    });
+    void saveProgress(book, nextProgress, status);
 
     setDraftProgress((current) => ({
       ...current,
@@ -108,10 +100,7 @@ const Library = () => {
   };
 
   const handleRemoveBook = (title: string) => {
-    const updatedBooks = libraryBooks.filter((book) => book.title !== title);
-    saveLibrary(updatedBooks);
-    clearReadingProgress(title);
-    setLibraryBooks(updatedBooks);
+    void removeBook(title);
     setDraftProgress((current) => {
       const next = { ...current };
       delete next[title];
@@ -128,7 +117,7 @@ const Library = () => {
     });
   };
 
-  const getBookProgress = (title: string) => draftProgress[title] ?? getStoredReadingProgress(title);
+  const getBookProgress = (title: string) => draftProgress[title] ?? progressMap[title] ?? null;
 
   const getFilterCount = (filter: LibraryFilter) => {
     if (filter === "all") {
@@ -208,7 +197,11 @@ const Library = () => {
       </section>
 
       <section className="mx-auto max-w-7xl px-6 py-12">
-        {libraryBooks.length === 0 ? (
+        {isLoading ? (
+          <div className="rounded-3xl border border-border bg-card/60 px-8 py-20 text-center">
+            <h2 className="text-2xl font-semibold">Loading your library...</h2>
+          </div>
+        ) : libraryBooks.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-border bg-card/60 px-8 py-20 text-center">
             <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
               <BookOpen className="h-8 w-8 text-primary" />
@@ -272,8 +265,8 @@ const Library = () => {
             ) : (
               <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {filteredBooks.map((book, index) => {
-              const review = getStoredReview(book.title);
-              const storedProgress = getStoredReadingProgress(book.title);
+              const review = getReview(book.title);
+              const storedProgress = progressMap[book.title] ?? null;
               const progress = draftProgress[book.title] ?? storedProgress;
 
               return (
@@ -435,8 +428,6 @@ const Library = () => {
         book={selectedBook}
         onClose={() => {
           setSelectedBook(null);
-          setLibraryBooks(getStoredLibrary());
-          syncStoredProgress();
         }}
       />
     </div>

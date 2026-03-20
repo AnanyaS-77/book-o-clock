@@ -18,17 +18,27 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 app = FastAPI()
 
 
+def normalize_origin(origin: str) -> str:
+    return origin.strip().rstrip("/")
+
+
 def get_allowed_origins():
     raw_value = os.getenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173"
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
     )
-    return [origin.strip() for origin in raw_value.split(",") if origin.strip()]
+    return [normalize_origin(origin) for origin in raw_value.split(",") if origin.strip()]
+
+
+def get_allowed_origin_regex():
+    raw_value = os.getenv("ALLOWED_ORIGIN_REGEX", "").strip()
+    return raw_value or None
 
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_allowed_origins(),
+    allow_origin_regex=get_allowed_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -695,6 +705,11 @@ def discover_books_by_mood(mood: str, n: int = 12):
 @app.get("/")
 def home():
     return {"message": "Book O Clock API running"}
+
+
+@app.get("/health")
+def healthcheck():
+    return {"status": "ok"}
 
 
 @app.get("/recommend")

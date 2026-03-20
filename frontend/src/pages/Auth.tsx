@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { supabase } from "@/lib/supabase";
+import { getAppOrigin } from "@/lib/runtimeConfig";
 
 type AuthMode = "signin" | "signup";
 type AuthView = "auth" | "forgot-password";
@@ -125,7 +126,7 @@ const Auth = () => {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${getAppOrigin()}/reset-password`,
       });
 
       if (error) {

@@ -80,9 +80,6 @@ df["features"] = df["title"] + " " + df["authors"] + " " + df["publisher"]
 vectorizer = TfidfVectorizer(stop_words="english")
 tfidf_matrix = vectorizer.fit_transform(df["features"])
 
-# Similarity
-similarity_matrix = cosine_similarity(tfidf_matrix)
-
 GOOGLE_BOOKS_CACHE_TTL_SECONDS = 60 * 30
 google_books_cache = {}
 
@@ -299,7 +296,8 @@ def recommend_from_dataset(book_title: str, author: str = "", n: int = 12):
         return []
 
     source_title = df.loc[index, "normalized_title"]
-    scores = list(enumerate(similarity_matrix[index]))
+    scores_array = cosine_similarity(tfidf_matrix[index:index + 1], tfidf_matrix).flatten()
+    scores = list(enumerate(scores_array))
     scores = sorted(scores, key=lambda item: item[1], reverse=True)
 
     recommendations = []
